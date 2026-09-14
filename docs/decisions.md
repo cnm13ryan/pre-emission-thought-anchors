@@ -55,3 +55,36 @@ Stage 1 (base commit `ad5758b`; implementation commit is the commit adding `mani
   Full evidence is in `docs/stage1_validation.md`. The status reader initially called an
   old completed heartbeat stale; it now limits that flag to running work, with a regression
   test. Alternative rejected: treating normal completion as a stalled-job diagnosis.
+
+Stage 2 (base commit `fbe40e1`; implementation commit adds `data/stage.py`):
+
+- **fact:** the Stage 1 MacBook receipt verified 122 files, manifest
+  `7dc74cfa250e5a4aded798faaf327819bff503cf7f13d68314578ffed07940f5` at
+  `2026-09-14T18:10:50.343230+00:00`. Receipt and local recheck complete the gate.
+  Rejected alternative: leaving the historical pending-backup status as current.
+- **fact:** pinned discovery resolves 306 files, 339,390,844 bytes: forty each of
+  base_solution, chunks_labeled, chunks and problem; README; 145 correct-4682 raw forks.
+  Exact paths, source Git/LFS hashes and sizes are frozen in `configs/locks/dataset_*`.
+  Rejected alternative: whole-repository, combined Parquet, other-model or variant downloads.
+- **choice:** retain `chunks.json` and `problem.json` alongside primary trace/label files
+  to preserve exact source segmentation and problem metadata for Stage 3. These add small
+  auxiliary source files without changing the forty trajectories or scientific choices.
+- **fact:** `selected_problems.json` was absent from the inspected dataset root and selected
+  trajectory directories and pinned source checkout. The explicit frozen split remains
+  authoritative; no substitute file or current-main revision was fetched.
+- **fact:** Hub 0.33.4 exports RepoFile/RepoFolder in `huggingface_hub.hf_api`, not the package
+  root. `chunks.json` is an object containing string chunks; `chunks_labeled.json` is a
+  list of objects. Minimal raw inspection exposed both draft assumptions before scale.
+  Rejected alternative: dependency upgrades or transforming raw upstream bytes.
+- **choice:** source files use exact singleton `snapshot_download` allowlists with revision
+  pins, persistent HF cache and independent Git-blob/LFS checks followed by SHA-256 units.
+  Main-loop heartbeats poll network worker completion. Graceful cancellation retains
+  partial units; SIGKILL recovery quarantines them. Valid units are never rewritten.
+- **interpretation:** Stage 2 schema/coverage tests are the applicable scientific gate
+  for selective acquisition. Later pre-emission, label-audit and probe gates remain
+  unimplemented and unclaimed. Downloading labels is not inspecting test metrics.
+- **fact:** first uncached raw fork (3,302,151 bytes) took 0.778 s; the first base file
+  took 0.643 s including singleton snapshot overhead. The 339 MB scope is expected well
+  under one hour. A current-commit smoke measurement precedes the complete fetch; if its
+  conservative projection reaches one hour, stop for the required cost/runtime gate.
+  No GPU or model weights are needed; hourly GPU rate/budget remain unspecified.

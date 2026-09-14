@@ -50,3 +50,8 @@ After fixing the mount guard and adding eight regression cases, the complete uni
 integration suite reports **26 passed in 0.81s**, with the same two upstream warnings;
 Ruff passes. See `docs/environment_deviations.md` for native/virtual mount evidence.
 The lock, scientific configuration and AGENTS hashes above are unchanged.
+
+Secondary backup follow-up: all six files verified on the MacBook at
+`2026-09-14T17:37:27.331293+00:00`, manifest SHA-256
+`dcd5417acca481bce61e1e50fbf79d2305f3f7f12b879ffb8877a03615f9c22c`.
+The earlier pending status above describes the original validation time.
