@@ -39,3 +39,10 @@ Record verified differences from the planned environment and original/replacemen
 The original full three-document read preceded all repository changes. `AGENTS.md`
 remains untouched. The first bootstrap lock hash and validation evidence are recorded
 in `docs/stage0_validation.md` after checks complete.
+
+## Stage 1 — permissions update
+
+The tool permission profile now allows filesystem and network access without command
+escalation. This does not resolve or waive the user's GPU-access gate: Stage 1 uses only
+CPU I/O. No GPU-dependent stage or full GPU doctor has been run. Python and uv continue
+using the existing regenerable development locations; `uv.lock` is unchanged.
