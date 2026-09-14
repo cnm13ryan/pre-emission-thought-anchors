@@ -99,6 +99,20 @@ def test_shared_adaptive_fork_extends_once():
     assert len({s.rollout_id for s in specs if s.fork_idx == 13}) == 100
 
 
+def test_shared_fork_store_reuses_one_completed_sample(tmp_path: Path):
+    targets = frozen_targets()
+    spec = next(s for s in production_specs(trajectory(), targets, 20260914, "c", "i",
+                                            samples_per_fork=1) if s.fork_idx == 13)
+    alternate = CompletionSpec("4682:correct", 13, 13, "without", 0, spec.seed,
+                               spec.prompt, "c", "i", spec.associations)
+    store = CompletionStore(tmp_path / "units")
+    _, first_created = store.run_one(spec, FakeBackend(), max_tokens=10,
+                                     temperature=.6, top_p=.95)
+    _, second_created = store.run_one(alternate, FakeBackend(), max_tokens=10,
+                                      temperature=.6, top_p=.95)
+    assert first_created and not second_created
+
+
 def test_benchmark_exact_count_and_resume_skip(tmp_path: Path):
     store = CompletionStore(tmp_path / "units")
     rows = benchmark(FakeBackend(), store, trajectory(), [6, 12, 13, 14, 46], count=8,
