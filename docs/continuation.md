@@ -113,3 +113,7 @@ A prepared snapshot is not secondary verification. Wait for the Mac receipt.
    schemas; retain MIT notices for ports; implement import/segmentation/exact sequential
    alignment, pinned tokenization and pilot target text mapping under existing gates.
 4. Do not skip to labels, generation or extraction. GPU-dependent work stays paused.
+
+## Stage 4 closure
+
+Fallback run 20260914T190027Z-stage4fallback-6e78475 is independently verified: 6,474/6,474 units, 20,996,423,633 bytes, zero checksum failures/missing/duplicates/unresolved, source manifest SHA-256 caf3ce503ca0260db47301b6e98bae9fa61831c5de8be0782e970ebc2c9f9127. The released-label audit failed the frozen >=0.95 agreement gate (Spearman 0.6217465713409153), so canonical fallback is importance_primary. Labels: 6,474 rows, 6,434 eligible, train-only q90 1.0685654935597562. Recovery provenance records snapshot_download failure at problem_6596/chunk_103/solutions.json, direct hf_hub_download recovery, unchanged revision/paths/run ID, 2,600 revalidated units, one quarantined/regenerated unit, and resume events. Stage 4 tests: 7 passed. Closure commit changes documentation/provenance only after scientific implementation commit 5e92130.
