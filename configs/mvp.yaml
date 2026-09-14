@@ -1,0 +1,158 @@
+schema_version: 1
+seed_root: 20260914
+model:
+  id: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+  revision: 1df8507178afcc1bef68cd8c393f61a886323761
+  tokenizer_revision: 1df8507178afcc1bef68cd8c393f61a886323761
+  dtype: bfloat16
+  quantization: null
+  context_length: 32768
+  attention_implementation: sdpa
+  decoder_layers: 48
+  d_model: 5120
+  chat_template: null
+dataset:
+  id: uzaymacar/math-rollouts
+  revision: a3a2fe1eb6d52e6ef81860baff018a8df2eb8ae2
+  problem_ids: [330, 1591, 2050, 2137, 2189, 2236, 2238, 2870, 3360, 3448, 3550, 3916, 3935, 4019, 4164, 4605, 4682, 6481, 6596, 6998]
+  trace_kinds: [correct, incorrect]
+  split_manifest: configs/splits/mvp_20_v1.yaml
+segmentation:
+  primary: released_chunks
+  parity_implementation: upstream_v1
+  future_implementation: span_v2
+  require_exact_alignment: true
+labels:
+  primary_field: importance_released
+  fallback_field: importance_canonical
+  fields: [importance_released, importance_legacy, importance_canonical]
+  canonical_direction: without_kl_with
+  answer_support: union_including_no_answer
+  no_answer_category: <NO_ANSWER>
+  with_distribution: next_fork_without_same_fork_pooling
+  similarity_model: sentence-transformers/all-MiniLM-L6-v2
+  similarity_revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+  similarity_threshold: 0.8
+  dissimilar_comparison: strictly_less
+  smoothing_alpha: 1.0e-9
+  smoothing_sensitivities: [0.5, 1.0]
+  binary_train_quantile: 0.90
+  anchor_comparison: greater_than_or_equal
+  continuous_transform: log1p
+  convergence_consecutive: 5
+  convergence_accuracy_intervals: [[0.0, 0.01], [0.99, 1.0]]
+  convergence_source: accuracy_proxy
+  exclude_convergence_position: true
+  exclude_final_answer: true
+  eligibility: [exact_span, unambiguous_boundary, noninitial_token, not_final_answer, next_fork_available, before_convergence, finite_nonnegative_importance]
+  audit:
+    trajectory: 4682:correct
+    minimum_finite_nonnegative_fraction: 0.99
+    minimum_spearman_released_vs_legacy_or_canonical: 0.95
+    failure_action: recompute_canonical_all_40
+features:
+  layers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]
+  activation_dtype: float16
+  activation_site: block_post_pre_final_norm
+  boundary: target_token_start_minus_one
+  overlapping_token: belongs_to_target
+  leads: [0, 1]
+  prohibit_future_features: true
+  statistics_dtype: float32
+  observables:
+    - sentence_idx
+    - generated_token_count
+    - prefix_token_count
+    - log1p_prefix_token_count
+    - prefix_context_fraction
+    - previous_sentence_tokens
+    - previous_emitted_token_logprob
+    - next_token_entropy
+    - next_token_max_probability
+    - next_token_probability_margin
+    - next_token_top5_mass
+    - next_token_top10_mass
+  excluded:
+    - target_sentence_text
+    - target_sentence_tokens
+    - first_target_token_logprob
+    - relative_completed_trace_position
+    - completed_trajectory_length
+    - eventual_correctness
+    - later_hidden_states
+  diagnostic_prefix: diagnostic__
+  invariance_atol_bfloat16: 0.02
+  invariance_atol_float32: 0.00001
+probes:
+  scaler: StandardScaler
+  binary: logistic_l2
+  class_weight: balanced
+  max_iter: 5000
+  logistic_C: [1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1, 10, 100]
+  continuous: ridge
+  ridge_alpha: [1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1, 10, 100, 1000, 10000]
+  cv_splitter: StratifiedGroupKFold
+  cv_folds: 4
+  cv_shuffle: true
+  group_column: problem_id
+  selection_metric: average_precision
+  ridge_selection_metric: spearman
+  ridge_tiebreak_metric: rmse
+  fit_scope: training_folds_only
+  calibration: platt_validation_only
+  calibration_minimum_positives: 20
+  calibration_minimum_classes: 2
+  baselines: [prevalence, position, context, uncertainty, observable_combined]
+  activation_models: [activation_only, activation_plus_observables]
+  residualization: fold_local_linear_observables
+  max_cpu_workers: 8
+evaluation:
+  stage: exploratory
+  preregistered: true
+  held_out_description: exploratory held-out engineering test
+  primary_metric: average_precision
+  primary_model: selected_activation_plus_observables
+  secondary_metrics: [auroc, brier, log_loss, ece, reliability, spearman, rmse, precision_top10_percent, ndcg_top10_percent, aucpr_gain, paired_differences]
+  bootstrap_replicates: 2000
+  bootstrap_unit: problem_id
+  bootstrap_paired: true
+  ece_bins: 10
+  ece_binning: equal_frequency
+  test_locked: true
+  minimum_train_sentences: 1000
+  minimum_validation_sentences: 200
+  minimum_test_sentences: 200
+  minimum_validation_anchors: 20
+  minimum_test_anchors: 20
+  threshold_sensitivities: [0.80, 0.90, 0.95]
+  convergence_sensitivities: [4, 5]
+  replacement_minimum_fraction: 0.10
+  replacement_minimum_count: 10
+  trajectory_subgroups: [correct, incorrect]
+  position_quintiles: 5
+  entropy_quintiles: 5
+  permutation_count: 100
+  permutation_strata: [problem_id, trace_kind, position_quintile]
+  minimum_experiments: [released_label_replay, observable_baselines, all_layer_probes, residualized_control, lead_one, threshold_sensitivity, convergence_sensitivity, replacement_quality, trajectory_subgroups, position_entropy_strata, permutation_null, fresh_4682_pilot]
+generation:
+  temperature: 0.6
+  top_p: 0.95
+  max_new_tokens: 16384
+  samples_per_fork: 32
+  adaptive_samples_per_fork: 100
+  minimum_dissimilar: 10
+  pilot_trajectory: 4682:correct
+  paper_display_sentences: [6, 12, 13, 14, 46]
+  target_manifest: configs/pilot_targets_4682.yaml
+  seed_derivation: sha256_first_8_hex_uint32
+  vllm_image: vllm/vllm-openai:v0.28.0
+tracking:
+  wandb_project: preanchor-mvp
+  wandb_mode: online
+  streamlit_address: 127.0.0.1
+  streamlit_port: 8501
+execution:
+  mode: mvp
+  extraction_batch_size: 1
+  heartbeat_seconds: 30
+  backup_interval_seconds: 900

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "preanchor"
+version = "0.1.0"
+description = "Offline pre-emission thought-anchor prediction MVP"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "numpy==2.2.6", "scipy==1.16.0", "pandas==2.3.1", "pyarrow==20.0.0",
+  "scikit-learn==1.7.1", "joblib", "pydantic==2.11.7", "pydantic-settings",
+  "PyYAML==6.0.2", "orjson==3.10.18", "typer==0.16.0", "rich==14.0.0",
+  "tenacity==9.1.2", "httpx", "huggingface-hub==0.33.4", "safetensors==0.5.3",
+  "wandb==0.21.0", "streamlit==1.46.1", "plotly==6.2.0", "kaleido",
+]
+
+[project.optional-dependencies]
+gpu = [
+  "torch==2.7.0", "transformers==4.53.2", "accelerate==1.8.1",
+  "sentence-transformers==5.0.0",
+]
+
+[dependency-groups]
+dev = ["pytest==8.4.1", "ruff"]
+
+[project.scripts]
+preanchor = "preanchor.cli:app"
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

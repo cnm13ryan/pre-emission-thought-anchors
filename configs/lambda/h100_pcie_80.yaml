@@ -1,0 +1,7 @@
+schema_version: 1
+profile: h100_pcie_80
+vllm:
+  max_num_seqs: 4
+  gpu_memory_utilization: 0.90
+  max_model_len: 32768
+extraction_batch_size: 1

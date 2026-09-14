@@ -1,0 +1,5 @@
+extends: mvp.yaml
+execution:
+  mode: smoke
+  trajectory: 330:correct
+  limit_sentences: 16

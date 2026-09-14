@@ -1,0 +1,6 @@
+[submodule "vendor/thought-anchors"]
+	path = vendor/thought-anchors
+	url = https://github.com/interp-reasoning/thought-anchors
+[submodule "vendor/thought-anchors.com"]
+	path = vendor/thought-anchors.com
+	url = https://github.com/interp-reasoning/thought-anchors.com
