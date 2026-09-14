@@ -293,3 +293,23 @@ def benchmark(backend: Backend, store: CompletionStore, trajectory: dict[str, An
                                temperature=temperature, top_p=top_p)
         rows.append(row)
     return rows
+
+
+def generate_production(backend: Backend, store: CompletionStore,
+                        trajectory: dict[str, Any], targets: list[dict[str, Any]], *,
+                        seed_root: int, config_hash: str, input_hash: str,
+                        samples_per_fork: int = 32, max_tokens: int = 16384,
+                        temperature: float = 0.6, top_p: float = 0.95) -> list[dict]:
+    """Generate the base pilot once per canonical fork/sample.
+
+    Adaptive extension is a second call with ``samples_per_fork=100`` after
+    support has been assessed; the caller must schedule only sample indices
+    32..99 for already-complete forks.
+    """
+    rows = []
+    for spec in production_specs(trajectory, targets, seed_root, config_hash,
+                                 input_hash, samples_per_fork=samples_per_fork):
+        row, _ = store.run_one(spec, backend, max_tokens=max_tokens,
+                               temperature=temperature, top_p=top_p)
+        rows.append(row)
+    return rows

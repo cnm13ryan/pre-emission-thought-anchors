@@ -12,6 +12,7 @@ from preanchor.labels.generate import (
     benchmark,
     build_prompt,
     canonical_prompt_identities,
+    generate_production,
     parse_response,
     production_specs,
     prompt_hash,
@@ -111,6 +112,15 @@ def test_shared_fork_store_reuses_one_completed_sample(tmp_path: Path):
     _, second_created = store.run_one(alternate, FakeBackend(), max_tokens=10,
                                       temperature=.6, top_p=.95)
     assert first_created and not second_created
+
+
+def test_production_scheduler_uses_unique_forks(tmp_path: Path):
+    rows = generate_production(FakeBackend(), CompletionStore(tmp_path / "units"),
+                               trajectory(), frozen_targets(), seed_root=20260914,
+                               config_hash="c", input_hash="i", samples_per_fork=2,
+                               max_tokens=10, temperature=.6, top_p=.95)
+    assert len(rows) == 16
+    assert len({row["rollout_id"] for row in rows}) == 16
 
 
 def test_benchmark_exact_count_and_resume_skip(tmp_path: Path):

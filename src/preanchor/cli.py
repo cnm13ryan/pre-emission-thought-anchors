@@ -232,6 +232,7 @@ def pilot_labels_command(
         CompletionStore,
         VLLMBackend,
         benchmark,
+        generate_production,
         prompt_hash,
         tokenizer_identity_check,
     )
@@ -273,11 +274,22 @@ def pilot_labels_command(
             special_tokens={"add_special_tokens": False, "chat_template": None})
         write_json(stage / "tokenizer_validation.json", token_record)
     started = time.perf_counter()
-    rows = benchmark(backend, CompletionStore(unit_root), trajectory, target_indices,
-                     count=benchmark_only or 0, seed_root=loaded.seed_root,
-                     config_hash=loaded.resolved_hash(), input_hash=trajectory["full_cot_sha256"],
-                     max_tokens=loaded.generation["max_new_tokens"],
-                     temperature=loaded.generation["temperature"], top_p=loaded.generation["top_p"])
+    if benchmark_only is not None:
+        rows = benchmark(backend, CompletionStore(unit_root), trajectory, target_indices,
+                         count=benchmark_only, seed_root=loaded.seed_root,
+                         config_hash=loaded.resolved_hash(),
+                         input_hash=trajectory["full_cot_sha256"],
+                         max_tokens=loaded.generation["max_new_tokens"],
+                         temperature=loaded.generation["temperature"],
+                         top_p=loaded.generation["top_p"])
+    else:
+        rows = generate_production(
+            backend, CompletionStore(unit_root), trajectory, targets,
+            seed_root=loaded.seed_root, config_hash=loaded.resolved_hash(),
+            input_hash=trajectory["full_cot_sha256"],
+            samples_per_fork=loaded.generation["samples_per_fork"],
+            max_tokens=loaded.generation["max_new_tokens"],
+            temperature=loaded.generation["temperature"], top_p=loaded.generation["top_p"])
     elapsed = time.perf_counter() - started
     rates = [r["generated_token_count"] / max(float(r.get("runtime_seconds", 0.0)), 1e-9)
              for r in rows]
