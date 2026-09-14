@@ -1,0 +1,4 @@
+extends: mvp.yaml
+execution:
+  mode: pilot
+  trajectory: 4682:correct

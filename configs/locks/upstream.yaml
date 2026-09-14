@@ -1,0 +1,10 @@
+schema_version: 1
+repositories:
+  vendor/thought-anchors:
+    url: https://github.com/interp-reasoning/thought-anchors
+    revision: b53ed8c75d3f6112f68adfaec9a13d4d708c442e
+  vendor/thought-anchors.com:
+    url: https://github.com/interp-reasoning/thought-anchors.com
+    revision: 67071a30bd2173c56f1772a26f6a9e6855170035
+vllm_image: vllm/vllm-openai:v0.28.0
+# Resolve and record the image digest before generation, never guess one.

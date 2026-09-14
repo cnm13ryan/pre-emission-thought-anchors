@@ -1,0 +1,7 @@
+schema_version: 1
+profile: a100_40
+vllm:
+  max_num_seqs: 1
+  gpu_memory_utilization: 0.92
+  max_model_len: 20480
+extraction_batch_size: 1
