@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from preanchor.config import ExperimentConfig, Settings, read_yaml
+from preanchor.storage import persistent_mount
 
 
 def command(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -39,13 +40,7 @@ def check_persistence(settings: Settings) -> dict[str, Any]:
     root = settings.persistent_root()
     if not root.is_dir():
         raise ValueError("Persistent root does not exist")
-    # Verify an actual NFS mount, not merely a directory named /lambda/nfs.
-    mounts = command(["findmnt", "--json", "--target", str(root), "-o", "FSTYPE,TARGET"])
-    import json
-
-    entries = json.loads(mounts.stdout).get("filesystems", []) if mounts.returncode == 0 else []
-    if not entries or entries[0]["fstype"] not in {"nfs", "nfs4"}:
-        raise ValueError("Persistent root is not on a verified NFS mount")
+    mount = persistent_mount(root)
     free = shutil.disk_usage(root).free
     if free < 100 * 10**9:
         raise ValueError("Persistent filesystem has less than 100 GB free")
@@ -64,7 +59,7 @@ def check_persistence(settings: Settings) -> dict[str, Any]:
         os.fsync(stream.fileno())
     if probe.read_bytes() != payload:
         raise ValueError("NFS write/read verification failed")
-    return {"root": str(root), "free_bytes": free, "write_probe": str(probe)}
+    return {"root": str(root), "free_bytes": free, "write_probe": str(probe), "mount": mount}
 
 
 def check_gpu() -> dict[str, Any]:

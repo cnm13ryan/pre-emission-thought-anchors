@@ -18,6 +18,17 @@ Record verified differences from the planned environment and original/replacemen
   submodule additions and revision pins require command escalation; nothing is pushed.
   Sandbox DNS blocks dependency downloads, so Python/uv network operations use approved
   escalation. Persistent NFS is readable but outside the sandbox's writable roots.
+- **Mount exposure (fact, observed after `2852b60`):** `findmnt` reports the user's
+  persistent filesystem at `/lambda/nfs/preanchor` with source
+  `b56cf504-e1e5-4726-9de4-1d2e39f756b4` and type `virtiofs`. Its options are
+  `ro,nosuid,nodev,relatime` inside the sandbox and `rw,nosuid,nodev,relatime` under
+  approved escalation. The first backup attempt rejected the type before creating any
+  snapshot. This exposed an overly restrictive implementation check, not a SPEC conflict.
+  The guard now accepts native NFS or the Codex shared-filesystem exposure, requires a
+  dedicated writable mount beneath `/lambda/nfs`, and verifies copied bytes. It reports
+  the observed type without claiming to have inspected the host's backing mount.
+  Regression tests reject root-disk, unrelated-mount and read-only cases. No scientific
+  choice, resolved config hash or experiment run was changed; no run exists yet.
 - **Regenerable tooling (choice):** Python 3.11 is installed in
   `/tmp/preanchor-python`; uv uses `/tmp/preanchor-uv-cache`; `.venv` is ignored in the
   checkout. These are disposable development dependencies, not experiment state.

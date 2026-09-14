@@ -43,3 +43,10 @@ No model weights or dataset files were downloaded; no inference, scientific resu
 test evaluation, external push or infrastructure change occurred. No `SUCCESS.json`
 or `SAFE_TO_TERMINATE` is warranted. Stage 1 must retain the pending backup gate and
 the user's explicit stop-before-GPU requirement.
+
+Follow-up validation on `codex/mvp` after bootstrap commit `2852b60`: the initial
+persistent snapshot attempt rejected the Codex `virtiofs` exposure before writing.
+After fixing the mount guard and adding eight regression cases, the complete unit and
+integration suite reports **26 passed in 0.81s**, with the same two upstream warnings;
+Ruff passes. See `docs/environment_deviations.md` for native/virtual mount evidence.
+The lock, scientific configuration and AGENTS hashes above are unchanged.
