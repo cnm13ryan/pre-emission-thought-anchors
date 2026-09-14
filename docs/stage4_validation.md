@@ -21,3 +21,5 @@ quarantine directory. The final source manifest SHA-256 is
 `caf3ce503ca0260db47301b6e98bae9fa61831c5de8be0782e970ebc2c9f9127`.
 Canonical fallback labels contain 6,474 rows, 6,434 eligible rows, and the
 training-only q90 threshold is 1.0685654935597562.
+
+Support closure: 6,474/6,474 sentence support outputs validated; CUDA/CPU parity had 10,000 comparisons and zero classification/support/NO_ANSWER disagreements. Full batched invocation wall time was 197.039 s. Sensitivity artifact rows: 6,474; q80=0.6147450059621669, q90=1.0685654935597562, q95=1.490691200555212; K=4 eligible rows=4,489 and K=5 eligible rows=4,627. Resume tests passed (2).
