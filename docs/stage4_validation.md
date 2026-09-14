@@ -13,3 +13,11 @@ projection above one hour. The required runtime, budget and hourly-rate approval
 pending; no fallback download has begun.
 
 Audit artifact: `/lambda/nfs/preanchor/preanchor/data/processed/stage4/upstream_audit.json`.
+
+Fallback verification run `20260914T190027Z-stage4fallback-6e78475` independently
+verified 6,474/6,474 source files (20,996,423,633 bytes), with zero checksum,
+missing, duplicate, or unresolved units after removal of the superseded empty
+quarantine directory. The final source manifest SHA-256 is
+`caf3ce503ca0260db47301b6e98bae9fa61831c5de8be0782e970ebc2c9f9127`.
+Canonical fallback labels contain 6,474 rows, 6,434 eligible rows, and the
+training-only q90 threshold is 1.0685654935597562.
