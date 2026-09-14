@@ -137,3 +137,13 @@ Stage 3/4 (working tree after `060f6c0`):
   assembly, including shared adaptive extensions (implementation commits `feca1dd`,
   `5baa359`). Rejected alternative: retaining
   target/condition in the rollout key, which would duplicate shared forks.
+- **fact (Stage 5 historical support audit):** surviving Stage 4 support units retain
+  only aggregate counts (`sample_count`, `similar_count`, `dissimilar_count`, and
+  `no_answer_count`), not generated replacement text or per-sample cosine values.
+  The deleted raw fallback corpus is therefore insufficient to reconstruct the
+  requested per-fork similarity distributions or independently rehash selected
+  samples. The five adaptive-eligible rows each show 0/100, but Stage 4 does not
+  record enough DeepSeek revision, prompt, stopping, or extraction provenance to
+  calibrate that rate for Stage 5. Classification: insufficient evidence; the fresh
+  32-sample rule remains authoritative. Rejected alternative: treating 0/100 as a
+  Stage 5 probability or generating beyond the specified 100 samples.
