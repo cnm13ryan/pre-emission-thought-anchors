@@ -96,3 +96,21 @@ Stage 2 (base commit `fbe40e1`; implementation commit adds `data/stage.py`):
   be mistaken for a polling timeout; propagate completed-future exceptions, covered by
   a failure/resume regression. No download timeout occurred in the completed run.
   Rejected alternative: spinning indefinitely after a failed network request.
+
+Stage 3/4 (working tree after `060f6c0`):
+
+- **fact:** exact sequential import aligned 40 trajectories and 6,474 released chunks
+  with zero unresolved spans. Outputs use checksummed Parquet and preserve raw source
+  bytes. Rejected alternative: fuzzy/global replacement or reconstructing traces.
+- **fact:** Problem 4682 audit found 100% finite/nonnegative released labels but Spearman
+  0.6217465713409153 versus canonical, below the frozen 0.95 gate. `importance_released`
+  is therefore not primary. Rejected alternative: ignoring the audit failure.
+- **choice:** follow SPEC fallback by discovering all 6,474 raw resample files, but pause
+  before downloading their 20.996 GB because measured projection exceeds one hour and
+  AGENTS §8/§13 require user runtime/budget approval. Rejected alternative: starting an
+  unapproved expensive data transfer.
+- **fact:** GPU readiness now passes in the Codex environment: A100-SXM4-40GB,
+  driver 580.105.08, locked torch 2.7.0+cu126, BF16 kernel, pinned model resolution,
+  writable persistence and production doctor. Stage 6 measured fit remains pending;
+  no Stage 5–7 workload ran. This supersedes only the access observation, not the
+  explicit user pause on GPU-dependent experimental stages.
