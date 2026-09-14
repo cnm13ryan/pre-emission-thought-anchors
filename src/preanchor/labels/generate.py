@@ -240,8 +240,10 @@ def adaptive_sample_count(dissimilar_count: int, *, base: int = 32,
     return maximum
 
 
-def support_counts(rows: list[dict[str, Any]], threshold: float = 0.8) -> dict[str, int]:
-    """Count only scientifically valid extracted/similarity-scored samples."""
+def support_counts(rows: list[dict[str, Any]], threshold: float = 0.8,
+                   *, target_sentence_idx: int | None = None,
+                   condition: str | None = None) -> dict[str, int]:
+    """Count valid samples, optionally for one target association."""
     extracted = 0
     scored = 0
     dissimilar = 0
@@ -254,6 +256,15 @@ def support_counts(rows: list[dict[str, Any]], threshold: float = 0.8) -> dict[s
             continue
         extracted += 1
         similarity = row.get("similarity")
+        if target_sentence_idx is not None or condition is not None:
+            matches = [x for x in row.get("association_similarity", [])
+                       if (target_sentence_idx is None
+                           or x.get("target_sentence_idx") == target_sentence_idx)
+                       and (condition is None or x.get("condition") == condition)]
+            if not matches:
+                similarity_failed += 1
+                continue
+            similarity = matches[0].get("similarity")
         if not isinstance(similarity, (int, float)):
             similarity_failed += 1
             continue
