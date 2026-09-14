@@ -17,3 +17,10 @@ the Stage 0 bootstrap commit containing this file (`git log --follow docs/decisi
 | choice | User chose MacBook-initiated SSH pulls into `~/preanchor-backups/` for the second durable copy. Stage 0 bundles only committed source, notices and validation documentation. | Pushing to the MacBook, uploading model caches/secrets, or claiming verification before the local receipt. |
 
 No research results, model selection or scientific amendments have occurred.
+
+Follow-up to bootstrap commit `2852b60` (`git log --follow src/preanchor/storage.py`):
+**fact:** the designated persistent filesystem is exposed through writable `virtiofs`
+under escalation. **choice:** fix the overly narrow NFS-type guard while retaining
+dedicated-mount/path/write/checksum requirements. Rejected alternatives: treating the
+root disk as durable, bypassing mount validation, or misreporting the virtual mount
+as native NFS. The rejected attempt wrote no snapshot; science and config are unchanged.
