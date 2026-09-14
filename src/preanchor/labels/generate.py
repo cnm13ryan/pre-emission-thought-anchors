@@ -49,6 +49,11 @@ def normalize_response(text: str | None) -> str:
     return normalize_answer(text)
 
 
+def is_dissimilar(similarity: float, threshold: float = 0.8) -> bool:
+    """Apply the frozen strict cosine-similarity decision rule."""
+    return float(similarity) < float(threshold)
+
+
 def parse_response(payload: dict[str, Any]) -> dict[str, Any]:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
