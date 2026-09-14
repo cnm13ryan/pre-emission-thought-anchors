@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib, json, os, time
 from pathlib import Path, PurePosixPath
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import HfApi, hf_hub_download
 from preanchor.config import load_config, config_hash
 from preanchor.io import UnitStore, write_json, write_artifact
 
@@ -26,8 +26,8 @@ def main():
     for i,r in enumerate(rows,1):
         key=config_hash({"stage":"stage4_fallback","record":r,"discovery":config_hash(discovery),"run_id":run_id})
         def writer(directory,r=r):
-            snap=snapshot_download(repo_id=cfg.dataset.id,repo_type="dataset",revision=cfg.dataset.revision,allow_patterns=[r["path"]],cache_dir=str(cache),max_workers=1)
-            src=Path(snap)/r["path"]; data=src.read_bytes(); assert len(data)==r["size"]
+            src=Path(hf_hub_download(repo_id=cfg.dataset.id,repo_type="dataset",revision=cfg.dataset.revision,filename=r["path"],cache_dir=str(cache)))
+            data=src.read_bytes(); assert len(data)==r["size"]
             digest=hashlib.sha256(data).hexdigest(); assert (not r["lfs_sha256"] or digest==r["lfs_sha256"])
             write_artifact(directory/PurePosixPath(r["path"]).name,data)
         directory,created=store.produce(key,writer); path=directory/PurePosixPath(r["path"]).name
