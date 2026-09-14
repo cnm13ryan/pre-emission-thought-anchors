@@ -123,3 +123,16 @@ Stage 3/4 (working tree after `060f6c0`):
   as an explicit manifest for the already frozen paper-display indices and adjacent
   fork mapping; no sentence numbering was inferred from new data. Rejected
   alternative: embedding benchmark outputs in production sample identities.
+- **fact (Stage 5 fork audit):** the frozen Problem 4682 mapping resolves target/
+  with associations `(6,6,7)`, `(12,12,13)`, `(13,13,14)`, `(14,14,15)` and
+  `(46,46,47)`. The canonical union is eight forks `[6,7,12,13,14,15,46,47]`,
+  with forks 13 and 14 each referenced by two adjacent target associations.
+  Adaptive eligibility is limited to the five without forks `[6,12,13,14,46]`,
+  because the specification tests dissimilar support for each target's without
+  distribution. Rejected alternative: multiplying five targets by two.
+- **choice (audit fix):** physical completion identity is now
+  `(trajectory_id, fork_idx, sample_idx, seed, prompt_hash, config_hash, input_hash)`;
+  target sentence and condition remain association metadata. The production planner
+  emits one job per unique fork/sample and exposes all target associations for label
+  assembly, including shared adaptive extensions. Rejected alternative: retaining
+  target/condition in the rollout key, which would duplicate shared forks.
