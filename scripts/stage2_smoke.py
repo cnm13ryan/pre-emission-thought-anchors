@@ -1,0 +1,126 @@
+"""Detached CPU-only persistent smoke: SIGTERM, SIGKILL, and unchanged completed artifacts."""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from preanchor.config import Settings, config_hash, load_config
+from preanchor.data.fetch import load_discovery, source_key
+from preanchor.data.stage import selected_records
+from preanchor.ids import file_hash
+from preanchor.io import UnitStore, write_json
+from preanchor.manifest import create_run, load_manifest
+from preanchor.storage import persistent_mount
+
+
+def main():
+    repo = Path(__file__).resolve().parents[1]
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    config = load_config(repo / "configs/mvp.yaml")
+    directory = create_run(root, repo, config, ["python scripts/stage2_smoke.py"])
+    print(json.dumps({"run_id": directory.name, "directory": str(directory)}), flush=True)
+    manifest = load_manifest(directory)
+    discovery = load_discovery(repo, config)
+    manifest["identity"]["input_hashes"] = {"dataset_discovery": config_hash(discovery)}
+    keys = [
+        source_key(r, discovery, manifest["identity"]) for r in selected_records(discovery, True)
+    ]
+    units = directory / "stages/stage2/units"
+
+    def launch(name, *, resume=False, delay=0):
+        args = [
+            sys.executable,
+            "-m",
+            "preanchor.cli",
+            "fetch",
+            "--smoke",
+            "--run-id",
+            directory.name,
+            "--delay-seconds",
+            str(delay),
+        ]
+        if resume:
+            args.append("--resume")
+        with (directory / "logs" / f"{name}.txt").open("x") as stream:
+            return subprocess.Popen(
+                args,
+                cwd=repo,
+                stdout=stream,
+                stderr=subprocess.STDOUT,
+                env={**os.environ, "CUDA_VISIBLE_DEVICES": "", "WANDB_MODE": "offline"},
+            )
+
+    def interrupt(process, signum, *, quarantine_count=0):
+        deadline = time.monotonic() + 80
+        try:
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    raise RuntimeError(f"Worker exited early: {process.returncode}")
+                completed = units / keys[0] / "SUCCESS.json"
+                partial = units / keys[1] / "request.json"
+                quarantines = list((units / "quarantine").glob("*"))
+                if completed.exists() and partial.exists() and len(quarantines) >= quarantine_count:
+                    process.send_signal(signum)
+                    return process.wait(timeout=30)
+                time.sleep(0.1)
+            raise TimeoutError("Worker did not reach the expected interruption boundary")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=30)
+
+    first = launch("01-sigterm", delay=31)
+    term_code = interrupt(first, signal.SIGTERM)
+    assert term_code != 0
+    store = UnitStore(units)
+    store.validate(keys[0])
+    before = {
+        str(p.relative_to(units / keys[0])): [file_hash(p), p.stat().st_mtime_ns]
+        for p in (units / keys[0]).rglob("*")
+        if p.is_file()
+    }
+    assert not (units / keys[1] / "SUCCESS.json").exists()
+    second = launch("02-sigkill", resume=True, delay=31)
+    kill_code = interrupt(second, signal.SIGKILL, quarantine_count=1)
+    assert kill_code == -signal.SIGKILL
+    third = launch("03-resume", resume=True)
+    assert third.wait(timeout=180) == 0
+    after = {
+        str(p.relative_to(units / keys[0])): [file_hash(p), p.stat().st_mtime_ns]
+        for p in (units / keys[0]).rglob("*")
+        if p.is_file()
+    }
+    assert before == after
+    for key in keys:
+        store.validate(key)
+    fourth = launch("04-noop-resume", resume=True)
+    assert fourth.wait(timeout=180) == 0
+    assert before == {
+        str(p.relative_to(units / keys[0])): [file_hash(p), p.stat().st_mtime_ns]
+        for p in (units / keys[0]).rglob("*")
+        if p.is_file()
+    }
+    result = {
+        "schema_version": 1,
+        "kind": "implementation_validation",
+        "run_id": directory.name,
+        "sigterm_exit": term_code,
+        "sigkill_exit": kill_code,
+        "completed_artifacts_unchanged": True,
+        "completed_file_evidence": before,
+        "quarantined_partial_units": len(list((units / "quarantine").iterdir())),
+        "units_verified": len(keys),
+        "gpu_used": False,
+        "state": "passed",
+    }
+    write_json(directory / "stages/stage2/resume_validation.json", result)
+    print(json.dumps(result), flush=True)
+
+
+if __name__ == "__main__":
+    main()

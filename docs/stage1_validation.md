@@ -1,7 +1,10 @@
 # Stage 1 validation
 
 Stage 1 implementation is validated on synthetic CPU data. No scientific finding or
-GPU admission is claimed. Its secondary backup remains pending the MacBook pull receipt.
+GPU admission is claimed. Its secondary backup was verified on the MacBook at
+`2026-09-14T18:10:50.343230+00:00` (122 files; manifest SHA-256
+`7dc74cfa250e5a4aded798faaf327819bff503cf7f13d68314578ffed07940f5`).
+The checksummed user receipt is stored beside the persistent Stage 1 snapshot.
 
 Implementation commit: `b002449e87210655813cfd8d78c953f95a803b1b` (clean at execution).
 The subsequent status-only correction and regression tests are in the commit containing
