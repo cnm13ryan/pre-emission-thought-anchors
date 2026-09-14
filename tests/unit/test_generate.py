@@ -12,12 +12,14 @@ from preanchor.labels.generate import (
     benchmark,
     build_prompt,
     canonical_prompt_identities,
+    extract_first_replacement_sentence,
     generate_production,
     is_dissimilar,
     parse_response,
     production_specs,
     prompt_hash,
     required_fork_associations,
+    support_counts,
     tokenizer_identity_check,
     unique_required_forks,
 )
@@ -40,6 +42,71 @@ def test_response_parsing_and_no_answer():
                              "usage": {"prompt_tokens": 3, "completion_tokens": 7}})
     assert parsed["normalized_answer"] == "<NO_ANSWER>"
     assert parsed["finish_reason"] == "length"
+
+
+def test_canonical_first_replacement_extraction_matches_upstream_rules():
+    result = extract_first_replacement_sentence("  First step.\n\nSecond step.\n")
+    assert result.success and result.text == "First step."
+    wrapped = extract_first_replacement_sentence("<think>First step.\nNext.</think>")
+    assert wrapped.text == "First step."
+
+
+@pytest.mark.parametrize("raw,reason", [
+    ("", "empty_output"), ("   \n", "empty_output"),
+    ("unterminated fragment", "no_terminated_sentence"),
+    ("<think>   </think>", "empty_after_think_delimiters"),
+])
+def test_extraction_failures_are_explicit(raw, reason):
+    result = extract_first_replacement_sentence(raw)
+    assert not result.success and result.text is None and result.failure_reason == reason
+
+
+def test_backend_field_is_diagnostic_and_canonical_extraction_wins():
+    parsed = parse_response({"choices": [{"text": "Canonical sentence. Next.",
+                                           "first_replacement_sentence": "Wrong."}]})
+    assert parsed["first_replacement_sentence"] == "Canonical sentence."
+    assert parsed["backend_first_replacement_sentence"] == "Wrong."
+    assert parsed["backend_extraction_matches"] is False
+
+
+def test_failed_extraction_cannot_count_as_similarity_support():
+    counts = support_counts([
+        {"extraction_status": "success", "first_replacement_sentence": "x", "similarity": .79},
+        {"extraction_status": "failed", "first_replacement_sentence": None, "similarity": .1},
+        {"extraction_status": "success", "first_replacement_sentence": "y", "similarity": None},
+    ])
+    assert counts == {"total_generated": 3, "valid_extracted": 2,
+                      "valid_similarity": 1, "dissimilar_valid": 1,
+                      "failed_extraction": 1, "failed_similarity": 1}
+
+
+def test_completion_store_persists_canonical_extraction(tmp_path: Path):
+    spec = CompletionSpec("t", 6, 6, "without", 0, 1, "P", "c", "i")
+    row, _ = CompletionStore(tmp_path / "units").run_one(
+        spec, FakeBackend(["First sentence. Second sentence."]),
+        max_tokens=10, temperature=.6, top_p=.95)
+    assert row["first_replacement_sentence"] == "First sentence."
+    assert row["extraction_status"] == "success"
+    assert row["backend_first_replacement_sentence"] is None
+    assert row["scientific_sample_valid"] is False
+
+
+class _Scorer:
+    def score(self, reference_text, replacement_text):
+        return 0.79 if reference_text == "target-13" else 0.81
+
+
+def test_shared_fork_scores_each_target_association_from_same_extraction(tmp_path: Path):
+    spec = CompletionSpec("t", 12, 13, "with", 0, 1, "P", "c", "i",
+                          ((12, "with"), (13, "without")))
+    row, _ = CompletionStore(tmp_path / "units").run_one(
+        spec, FakeBackend(["Replacement sentence. Next sentence."]), max_tokens=10,
+        temperature=.6, top_p=.95, similarity_scorer=_Scorer(),
+        reference_texts={12: "target-12", 13: "target-13"})
+    assert row["first_replacement_sentence"] == "Replacement sentence."
+    assert [(x["target_sentence_idx"], x["is_dissimilar"])
+            for x in row["association_similarity"]] == [(12, False), (13, True)]
+    assert row["scientific_sample_valid"] is True
 
 
 def test_frozen_strict_dissimilarity_direction():

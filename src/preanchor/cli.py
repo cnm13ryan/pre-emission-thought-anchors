@@ -230,6 +230,7 @@ def pilot_labels_command(
     from preanchor.io import write_json
     from preanchor.labels.generate import (
         CompletionStore,
+        MiniLMSimilarityScorer,
         VLLMBackend,
         benchmark,
         generate_production,
@@ -283,13 +284,22 @@ def pilot_labels_command(
                          temperature=loaded.generation["temperature"],
                          top_p=loaded.generation["top_p"])
     else:
+        # Similarity is computed from the canonical extracted replacement, not
+        # from any backend convenience field.  Keep MiniLM in this client
+        # process on CPU; vLLM remains the sole GPU resident model.
+        reference_texts = {
+            int(r["sentence_idx"]): r["text"]
+            for r in sentences if r["trajectory_id"] == "4682:correct"
+        }
+        similarity_scorer = MiniLMSimilarityScorer(device="cpu")
         rows = generate_production(
             backend, CompletionStore(unit_root), trajectory, targets,
             seed_root=loaded.seed_root, config_hash=loaded.resolved_hash(),
             input_hash=trajectory["full_cot_sha256"],
             samples_per_fork=loaded.generation["samples_per_fork"],
             max_tokens=loaded.generation["max_new_tokens"],
-            temperature=loaded.generation["temperature"], top_p=loaded.generation["top_p"])
+            temperature=loaded.generation["temperature"], top_p=loaded.generation["top_p"],
+            similarity_scorer=similarity_scorer, reference_texts=reference_texts)
     elapsed = time.perf_counter() - started
     rates = [r["generated_token_count"] / max(float(r.get("runtime_seconds", 0.0)), 1e-9)
              for r in rows]

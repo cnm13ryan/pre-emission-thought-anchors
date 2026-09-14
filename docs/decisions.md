@@ -147,3 +147,13 @@ Stage 3/4 (working tree after `060f6c0`):
   calibrate that rate for Stage 5. Classification: insufficient evidence; the fresh
   32-sample rule remains authoritative. Rejected alternative: treating 0/100 as a
   Stage 5 probability or generating beyond the specified 100 samples.
+- **choice (Stage 5 extraction audit):** derive the first replacement sentence
+  centrally with the pinned Thought Anchors `split_solution_into_chunks` semantics
+  (optional `<think>` delimiters, paragraph and `.?!`-with-whitespace boundaries,
+  short-chunk merging, and no unterminated final fragment). Backend-provided
+  replacement fields remain diagnostics and cannot supply scientific text. Pinned
+  MiniLM scores are computed from the canonical extracted text and each target
+  association is scored separately for shared forks. Failed extraction or scoring
+  is invalid support, never an implicit similar/dissimilar sample. Rejected
+  alternative: trusting optional backend fields or converting failed output to a
+  binary similarity decision.

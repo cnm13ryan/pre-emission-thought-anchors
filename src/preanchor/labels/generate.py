@@ -22,6 +22,60 @@ MODEL_ID = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 MODEL_REVISION = "1df8507178afcc1bef68cd8c393f61a886323761"
 
 
+@dataclass(frozen=True)
+class ExtractionResult:
+    """Deterministic first-chunk extraction from a raw continuation."""
+
+    text: str | None
+    success: bool
+    failure_reason: str | None = None
+
+
+def extract_first_replacement_sentence(raw_completion: str | None) -> ExtractionResult:
+    """Apply the pinned Thought Anchors ``split_solution_into_chunks`` rules."""
+    if not isinstance(raw_completion, str) or not raw_completion.strip():
+        return ExtractionResult(None, False, "empty_output")
+    text = raw_completion
+    if "<think>" in text:
+        text = text.split("<think>", 1)[1].strip()
+    if "</think>" in text:
+        text = text.split("</think>", 1)[0].strip()
+    if not text:
+        return ExtractionResult(None, False, "empty_after_think_delimiters")
+    chunks: list[str] = []
+    current: list[str] = []
+    i = 0
+    while i < len(text):
+        current.append(text[i])
+        paragraph = text.startswith("\n\n", i) or text.startswith("\r\n\r\n", i)
+        sentence_end = text[i] in ".!?" and i + 1 < len(text) and text[i + 1] in " \n"
+        if paragraph or sentence_end:
+            chunk = "".join(current).strip()
+            if chunk:
+                chunks.append(chunk)
+            current = []
+        i += 1
+    # Preserve the pinned upstream behavior: an unterminated final fragment is
+    # not promoted to a sentence.
+    i = 0
+    while i < len(chunks):
+        if len(chunks[i]) < 10:
+            if i == len(chunks) - 1:
+                if i > 0:
+                    chunks[i - 1] = chunks[i - 1] + " " + chunks[i]
+                    chunks.pop(i)
+            else:
+                chunks[i + 1] = chunks[i] + " " + chunks[i + 1]
+                chunks.pop(i)
+            if i == 0 and len(chunks) == 1:
+                break
+        else:
+            i += 1
+    if not chunks:
+        return ExtractionResult(None, False, "no_terminated_sentence")
+    return ExtractionResult(chunks[0], True)
+
+
 def prompt_hash(prompt: str) -> str:
     return hashlib.sha256(prompt.encode()).hexdigest()
 
@@ -61,9 +115,20 @@ def parse_response(payload: dict[str, Any]) -> dict[str, Any]:
     choice = choices[0]
     message = choice.get("message", {})
     text = choice.get("text") or message.get("content") or ""
+    extraction = extract_first_replacement_sentence(text)
+    backend_field = (choice.get("first_replacement_sentence")
+                     or message.get("first_replacement_sentence")
+                     or payload.get("first_replacement_sentence"))
     usage = payload.get("usage") or {}
     return {
         "raw_answer": text,
+        "first_replacement_sentence": extraction.text,
+        "extraction_status": "success" if extraction.success else "failed",
+        "extraction_failure_reason": extraction.failure_reason,
+        "backend_first_replacement_sentence": backend_field,
+        "backend_extraction_matches": (
+            None if backend_field is None else backend_field == extraction.text
+        ),
         "normalized_answer": normalize_response(text),
         "finish_reason": choice.get("finish_reason"),
         "generated_token_count": int(usage.get("completion_tokens", 0)),
@@ -76,7 +141,31 @@ class Backend(Protocol):
     image_digest: str | None
 
     def complete(self, prompt: str, *, seed: int, max_tokens: int,
-                 temperature: float, top_p: float) -> dict[str, Any]: ...
+                temperature: float, top_p: float) -> dict[str, Any]: ...
+
+
+class SimilarityScorer(Protocol):
+    def score(self, reference_text: str, replacement_text: str) -> float: ...
+
+
+class MiniLMSimilarityScorer:
+    """Pinned MiniLM scorer used after canonical extraction."""
+
+    def __init__(self, *, device: str = "cpu"):
+        from sentence_transformers import SentenceTransformer
+
+        self.model = SentenceTransformer(
+            "sentence-transformers/all-MiniLM-L6-v2",
+            revision="1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+            device=device,
+        )
+
+    def score(self, reference_text: str, replacement_text: str) -> float:
+        embeddings = self.model.encode(
+            [reference_text, replacement_text], normalize_embeddings=True,
+            convert_to_numpy=True, show_progress_bar=False,
+        )
+        return float(embeddings[0] @ embeddings[1])
 
 
 class VLLMBackend:
@@ -151,6 +240,31 @@ def adaptive_sample_count(dissimilar_count: int, *, base: int = 32,
     return maximum
 
 
+def support_counts(rows: list[dict[str, Any]], threshold: float = 0.8) -> dict[str, int]:
+    """Count only scientifically valid extracted/similarity-scored samples."""
+    extracted = 0
+    scored = 0
+    dissimilar = 0
+    extraction_failed = 0
+    similarity_failed = 0
+    for row in rows:
+        if row.get("extraction_status") != "success" or not row.get(
+                "first_replacement_sentence"):
+            extraction_failed += 1
+            continue
+        extracted += 1
+        similarity = row.get("similarity")
+        if not isinstance(similarity, (int, float)):
+            similarity_failed += 1
+            continue
+        scored += 1
+        dissimilar += int(is_dissimilar(float(similarity), threshold))
+    return {"total_generated": len(rows), "valid_extracted": extracted,
+            "valid_similarity": scored, "dissimilar_valid": dissimilar,
+            "failed_extraction": extraction_failed,
+            "failed_similarity": similarity_failed}
+
+
 @dataclass(frozen=True)
 class CompletionSpec:
     trajectory_id: str
@@ -179,12 +293,28 @@ class CompletionStore:
         self.units = UnitStore(root)
 
     def run_one(self, spec: CompletionSpec, backend: Backend, *, max_tokens: int,
-                temperature: float, top_p: float) -> tuple[dict, bool]:
+                temperature: float, top_p: float,
+                similarity_scorer: SimilarityScorer | None = None,
+                reference_texts: dict[int, str] | None = None) -> tuple[dict, bool]:
         key = spec.rollout_id
         def writer(directory: Path) -> None:
             result = backend.complete(spec.prompt, seed=spec.seed, max_tokens=max_tokens,
                                       temperature=temperature, top_p=top_p)
-            row = {"schema_version": 1, "rollout_id": key,
+            extraction = extract_first_replacement_sentence(result.get("raw_answer"))
+            association_scores: list[dict[str, Any]] = []
+            if extraction.success and similarity_scorer is not None and reference_texts is not None:
+                for target_idx, condition in spec.associations or (
+                        (spec.target_sentence_idx, spec.condition),):
+                    reference = reference_texts.get(target_idx)
+                    if reference is None:
+                        raise ValueError(f"missing reference sentence {target_idx}")
+                    score = similarity_scorer.score(reference, extraction.text or "")
+                    association_scores.append({
+                        "target_sentence_idx": target_idx, "condition": condition,
+                        "similarity": score, "is_dissimilar": is_dissimilar(score),
+                    })
+            primary_score = association_scores[0]["similarity"] if association_scores else None
+            row = {**result, "schema_version": 1, "rollout_id": key,
                    "trajectory_id": spec.trajectory_id,
                    "target_sentence_idx": spec.target_sentence_idx,
                    "fork_idx": spec.fork_idx, "condition": spec.condition,
@@ -197,10 +327,24 @@ class CompletionStore:
                    "config_hash": spec.config_hash, "input_hash": spec.input_hash,
                    "model_id": MODEL_ID, "model_revision": MODEL_REVISION,
                    "status": "complete",
-                   "first_replacement_sentence": result.get("first_replacement_sentence"),
-                   "similarity": result.get("similarity"),
-                   "is_dissimilar": result.get("is_dissimilar"),
-                   "correctness": result.get("correctness"), **result}
+                   "first_replacement_sentence": extraction.text,
+                   "association_similarity": association_scores,
+                   "similarity": primary_score,
+                   "is_dissimilar": (
+                       None if primary_score is None else is_dissimilar(primary_score)
+                   ),
+                   "extraction_status": "success" if extraction.success else "failed",
+                   "extraction_failure_reason": extraction.failure_reason,
+                   "scientific_sample_valid": bool(
+                       extraction.success and bool(association_scores)
+                   ),
+                   "backend_first_replacement_sentence": result.get(
+                       "backend_first_replacement_sentence"
+                   ),
+                   "backend_extraction_matches": (
+                       None if result.get("backend_first_replacement_sentence") is None
+                       else result.get("backend_first_replacement_sentence") == extraction.text
+                   )}
             write_json(directory / "completion.json", row)
         directory, created = self.units.produce(key, writer)
         return read_json(directory / "completion.json"), created
@@ -304,7 +448,9 @@ def generate_production(backend: Backend, store: CompletionStore,
                         trajectory: dict[str, Any], targets: list[dict[str, Any]], *,
                         seed_root: int, config_hash: str, input_hash: str,
                         samples_per_fork: int = 32, max_tokens: int = 16384,
-                        temperature: float = 0.6, top_p: float = 0.95) -> list[dict]:
+                        temperature: float = 0.6, top_p: float = 0.95,
+                        similarity_scorer: SimilarityScorer | None = None,
+                        reference_texts: dict[int, str] | None = None) -> list[dict]:
     """Generate the base pilot once per canonical fork/sample.
 
     Adaptive extension is a second call with ``samples_per_fork=100`` after
@@ -315,6 +461,8 @@ def generate_production(backend: Backend, store: CompletionStore,
     for spec in production_specs(trajectory, targets, seed_root, config_hash,
                                  input_hash, samples_per_fork=samples_per_fork):
         row, _ = store.run_one(spec, backend, max_tokens=max_tokens,
-                               temperature=temperature, top_p=top_p)
+                               temperature=temperature, top_p=top_p,
+                               similarity_scorer=similarity_scorer,
+                               reference_texts=reference_texts)
         rows.append(row)
     return rows
