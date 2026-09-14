@@ -58,6 +58,39 @@ def test_manifest_pointer_publication_recovers_from_stale_sidecar(prepared):
         load_manifest(directory)
 
 
+def test_completed_stage_is_not_reported_as_stalled(prepared):
+    import json
+    import os
+
+    from typer.testing import CliRunner
+
+    from preanchor.cli import app
+
+    directory, config, _ = prepared
+    run_smoke(directory, ROOT, config, tracking=False)
+    os.utime(directory / 'heartbeat.json', (0, 0))
+    result = CliRunner().invoke(app, ['status', '--root', str(directory.parents[2])])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)['stale'] is False
+
+
+def test_main_loop_heartbeat_updates_at_30_seconds(tmp_path, monkeypatch):
+    from preanchor.runtime import Runtime
+
+    clock = [0.0]
+    monkeypatch.setattr('preanchor.runtime.time.monotonic', lambda: clock[0])
+    runtime = Runtime(tmp_path, 'fixture', 1)
+    runtime.pulse(force=True)
+    heartbeat = tmp_path / 'heartbeat.json'
+    original = heartbeat.read_bytes()
+    clock[0] = 29
+    runtime.pulse()
+    assert heartbeat.read_bytes() == original
+    clock[0] = 30
+    runtime.pulse()
+    assert heartbeat.read_bytes() != original
+
+
 def test_wandb_online_failure_falls_back_without_credentials_in_config(tmp_path, monkeypatch):
     import wandb
 
