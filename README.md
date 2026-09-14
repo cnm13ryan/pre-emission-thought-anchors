@@ -42,6 +42,21 @@ admitted. No infrastructure management is implemented.
 ## Implementation status
 
 Stage 0 supplies the package, lock, config loader, structured logging, doctor and pinned
-submodules. Stage 1 introduces run provenance and resumable artifact I/O; later stages
+submodules. Stage 1 implements run provenance and resumable artifact I/O; later stages
 remain unimplemented. No dataset or model weights have been downloaded. Scientific
 config changes require the amendment and approval process in `AGENTS.md` §4.
+
+Stage 1 commands (with the persistent environment exported):
+
+```bash
+uv run --frozen preanchor init-run --config configs/smoke.yaml
+uv run --frozen preanchor io-smoke --run-id RUN_ID
+uv run --frozen preanchor io-smoke --run-id RUN_ID --resume
+uv run --frozen preanchor status --root "$PREANCHOR_ROOT"
+```
+
+The smoke command writes synthetic format fixtures only. For the complete interruption
+exercise, run `scripts/stage1_smoke.py` detached in tmux. It deliberately interrupts its
+own worker, resumes missing work, and checks that completed bytes and mtimes are unchanged.
+Run-root success and termination markers are reserved for the complete MVP; Stage 1
+completion appears only under `stages/stage1/`.
