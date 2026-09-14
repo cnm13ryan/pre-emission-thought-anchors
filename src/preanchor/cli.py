@@ -93,13 +93,14 @@ def status(
             continue
         manifest = load_manifest(directory)
         heartbeat = directory / "heartbeat.json"
+        heartbeat_data = json.loads(heartbeat.read_bytes()) if heartbeat.exists() else None
         events = sorted((directory / "logs/events").glob("*.jsonl"),
                         key=lambda p: p.stat().st_mtime)[-5:]
         typer.echo(json.dumps({"run_id": directory.name, "stages": manifest["stages"],
-                               "heartbeat": json.loads(heartbeat.read_bytes())
-                               if heartbeat.exists() else None,
-                               "stale": time.time() - heartbeat.stat().st_mtime > 90
-                               if heartbeat.exists() else True,
+                               "heartbeat": heartbeat_data,
+                               "stale": (heartbeat_data.get("state") == "running"
+                                         and time.time() - heartbeat.stat().st_mtime > 90)
+                               if heartbeat_data else True,
                                "recent_logs": [p.read_text() for p in events]}))
 
 

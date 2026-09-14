@@ -22,3 +22,11 @@ only after all copied files match their SHA-256 manifest. Return that receipt to
 agent to record verification. A prepared NFS snapshot alone is not a verified second copy.
 
 The GPU hourly rate/runtime/budget remain unspecified.
+
+Stage 1 provides `preanchor init-run`, `io-smoke --resume`, and `status`. The detached
+`scripts/stage1_smoke.py` exercises interruption recovery on tiny synthetic CPU fixtures.
+After it passes and the source is committed, prepare its immutable MacBook pull snapshot
+with `.venv/bin/python scripts/prepare_stage1_backup.py RUN_ID`. Run the snapshot's
+`pull_artifacts.sh` on the MacBook exactly as for Stage 0; return the emitted receipt.
+This is a stage-specific backup implementation. Later dataset/model stages have not
+been admitted or implemented, and termination markers remain prohibited.

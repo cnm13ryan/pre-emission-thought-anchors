@@ -50,3 +50,8 @@ Stage 1 (base commit `ad5758b`; implementation commit is the commit adding `mani
   or implicit GPU admission during I/O validation.
 - **interpretation:** implementation-validation runs are not research experiments or
   evidence about probe performance. No Stage 1 artifact is a test metric or anchor label.
+- **fact (after `b002449`):** the persistent smoke preserved completed hashes/mtimes
+  through SIGTERM and SIGKILL, quarantined two partial units and completed a no-op resume.
+  Full evidence is in `docs/stage1_validation.md`. The status reader initially called an
+  old completed heartbeat stale; it now limits that flag to running work, with a regression
+  test. Alternative rejected: treating normal completion as a stalled-job diagnosis.
