@@ -14,8 +14,10 @@ mkdir -p "$ROOT/artifacts"
 digest=$(sudo -n docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null || true)
 [[ -n "$digest" ]] || { echo "Pinned vLLM image is not available: $IMAGE" >&2; exit 1; }
 printf '%s\n' "$digest" > "$ROOT/artifacts/vllm-image-digest.txt"
+# The host-side publish remains localhost-only; inside the container the
+# service must bind all interfaces for Docker's loopback publish to work.
 exec sudo -n docker run --rm --name preanchor-vllm --gpus all --ipc=host \
   -p 127.0.0.1:8000:8000 -v "$HF_HOME:/root/.cache/huggingface" "$IMAGE" \
   --model "$MODEL" --revision "$REVISION" --dtype bfloat16 --max-model-len 20480 \
   --enable-prefix-caching --gpu-memory-utilization 0.92 --max-num-seqs 1 \
-  --host 127.0.0.1 --port 8000 --seed 20260914
+  --host 0.0.0.0 --port 8000 --seed 20260914
