@@ -1,0 +1,19 @@
+schema_version: 1
+trajectory_id: 4682:correct
+# Frozen paper-display mapping; each target is paired with its adjacent fork.
+targets:
+  - sentence_idx: 6
+    without_fork_idx: 6
+    with_fork_idx: 7
+  - sentence_idx: 12
+    without_fork_idx: 12
+    with_fork_idx: 13
+  - sentence_idx: 13
+    without_fork_idx: 13
+    with_fork_idx: 14
+  - sentence_idx: 14
+    without_fork_idx: 14
+    with_fork_idx: 15
+  - sentence_idx: 46
+    without_fork_idx: 46
+    with_fork_idx: 47

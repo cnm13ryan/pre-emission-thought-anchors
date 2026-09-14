@@ -114,3 +114,12 @@ Stage 3/4 (working tree after `060f6c0`):
   writable persistence and production doctor. Stage 6 measured fit remains pending;
   no Stage 5–7 workload ran. This supersedes only the access observation, not the
   explicit user pause on GPU-dependent experimental stages.
+
+## Stage 5 development
+
+- **choice:** Stage 5 generation uses immutable completion work units, the frozen
+  `sample_seed` derivation, localhost vLLM requests, and benchmark outputs in a
+  separate namespace. The missing `configs/pilot_targets_4682.yaml` was restored
+  as an explicit manifest for the already frozen paper-display indices and adjacent
+  fork mapping; no sentence numbering was inferred from new data. Rejected
+  alternative: embedding benchmark outputs in production sample identities.
