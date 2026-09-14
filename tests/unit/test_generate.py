@@ -13,6 +13,7 @@ from preanchor.labels.generate import (
     build_prompt,
     canonical_prompt_identities,
     generate_production,
+    is_dissimilar,
     parse_response,
     production_specs,
     prompt_hash,
@@ -39,6 +40,12 @@ def test_response_parsing_and_no_answer():
                              "usage": {"prompt_tokens": 3, "completion_tokens": 7}})
     assert parsed["normalized_answer"] == "<NO_ANSWER>"
     assert parsed["finish_reason"] == "length"
+
+
+def test_frozen_strict_dissimilarity_direction():
+    assert is_dissimilar(0.79)
+    assert not is_dissimilar(0.80)
+    assert not is_dissimilar(0.81)
 
 
 def test_tokenizer_mismatch_fails_closed():
