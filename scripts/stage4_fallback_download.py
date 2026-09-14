@@ -32,7 +32,9 @@ def main():
             write_artifact(directory/PurePosixPath(r["path"]).name,data)
         directory,created=store.produce(key,writer); path=directory/PurePosixPath(r["path"]).name
         manifest.append({**r,"unit_key":key,"local_path":str(path),"sha256":hashlib.sha256(path.read_bytes()).hexdigest()})
-        if i%10==0: write_json(stage/"progress.json",{"completed":i,"total":len(rows),"elapsed_seconds":time.monotonic()-started})
+        if i%10==0:
+            from preanchor.io import atomic_bytes, json_bytes
+            atomic_bytes(stage/"progress.json", json_bytes({"completed":i,"total":len(rows),"elapsed_seconds":time.monotonic()-started}), replace=True)
     write_json(stage/"source_manifest.json",{"schema_version":1,"discovery_sha256":config_hash(discovery),"files":manifest})
     write_json(stage/"SUCCESS.json",{"schema_version":1,"files":len(manifest),"bytes":sum(r["size"] for r in rows)})
 if __name__=='__main__': main()
