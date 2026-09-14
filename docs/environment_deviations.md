@@ -46,3 +46,11 @@ The tool permission profile now allows filesystem and network access without com
 escalation. This does not resolve or waive the user's GPU-access gate: Stage 1 uses only
 CPU I/O. No GPU-dependent stage or full GPU doctor has been run. Python and uv continue
 using the existing regenerable development locations; `uv.lock` is unchanged.
+
+## Stage 4 — GPU access resolution
+
+The current Codex context passed `nvidia-smi` and the locked BF16 CUDA check on the
+A100-SXM4-40GB (driver 580.105.08). The earlier failure was an execution-context
+restriction, not a host driver failure. No driver, CUDA toolkit or GPU class changed.
+Production `preanchor doctor` passed with torch `2.7.0+cu126`; the Stage 6 measured model
+fit gate remains unrun and GPU workloads remain paused by user instruction.

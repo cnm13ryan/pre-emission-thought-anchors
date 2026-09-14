@@ -157,5 +157,60 @@ def validate_download_command(
     typer.echo(json.dumps(result, sort_keys=True))
 
 
+@app.command("import-data")
+def import_data_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    run_id: Annotated[str, typer.Option()] = "20260914T183017Z-1c085746e3-08bc1e7c",
+) -> None:
+    """Import exact released traces and sequentially align their chunks."""
+    from preanchor.data.importer import import_all
+
+    root = Settings().persistent_root()
+    run = root / "artifacts/runs" / run_id
+    manifest = json.loads((run / "stages/stage2/source_manifest.json").read_bytes())
+    loaded = load_config(config)
+    output = root / "data/processed/stage3"
+    result = import_all(manifest, loaded.dataset.problem_ids, output)
+    typer.echo(json.dumps({"trajectories": len(result["trajectories"]),
+                           "sentences": len(result["sentences"]), "unresolved": 0}))
+
+
+@app.command("align")
+def align_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    run_id: Annotated[str, typer.Option()] = "20260914T183017Z-1c085746e3-08bc1e7c",
+) -> None:
+    """Validate the persisted Stage 3 alignment output."""
+    from preanchor.io import validate_parquet
+
+    root = Settings().persistent_root()
+    output = root / "data/processed/stage3"
+    trajectories = validate_parquet(output / "trajectories.parquet")
+    sentences = validate_parquet(output / "sentences.parquet")
+    if trajectories.num_rows != 40 or sentences.num_rows == 0:
+        raise typer.BadParameter("Stage 3 grain is incomplete")
+    typer.echo(json.dumps({"trajectories": trajectories.num_rows,
+                           "sentences": sentences.num_rows, "unresolved": 0}))
+
+
+@app.command("validate-data")
+def validate_data_command() -> None:
+    """Check Stage 3 checksummed Parquet outputs and exact span slices."""
+    from preanchor.io import validate_parquet
+
+    root = Settings().persistent_root()
+    output = root / "data/processed/stage3"
+    trajectories = validate_parquet(output / "trajectories.parquet").to_pylist()
+    sentences = validate_parquet(output / "sentences.parquet").to_pylist()
+    by_id = {r["trajectory_id"]: r for r in trajectories}
+    if any(not r["alignment_ok"] or not r["eligible"] for r in sentences):
+        raise typer.BadParameter("Unresolved or ineligible Stage 3 primary row")
+    if any(by_id[r["trajectory_id"]]["full_cot"][r["char_start"]:r["char_end"]] != r["text"]
+           for r in sentences):
+        raise typer.BadParameter("Sentence span does not match exact trace text")
+    typer.echo(json.dumps({"trajectories": len(trajectories), "sentences": len(sentences),
+                           "unresolved": 0}))
+
+
 if __name__ == "__main__":
     app()
