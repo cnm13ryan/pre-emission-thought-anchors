@@ -82,6 +82,7 @@ def test_shared_fork_rollout_identity_and_seed_are_association_independent():
     # Same canonical fork/sample has one key and the frozen seed derivation.
     assert len(specs) == 8
     assert by_fork[13].seed == sample_seed(20260914, "4682:correct", 13, 0)
+    assert set(by_fork[13].associations) == {(12, "with"), (13, "without")}
     shared_a = CompletionSpec("4682:correct", 12, 13, "with", 0,
                               by_fork[13].seed, by_fork[13].prompt, "c", "i")
     shared_b = CompletionSpec("4682:correct", 13, 13, "without", 0,

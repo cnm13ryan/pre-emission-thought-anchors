@@ -157,6 +157,7 @@ class CompletionSpec:
     prompt: str
     config_hash: str
     input_hash: str
+    associations: tuple[tuple[int, str], ...] = ()
 
     @property
     def rollout_id(self) -> str:
@@ -182,6 +183,10 @@ class CompletionStore:
                    "trajectory_id": spec.trajectory_id,
                    "target_sentence_idx": spec.target_sentence_idx,
                    "fork_idx": spec.fork_idx, "condition": spec.condition,
+                   "target_associations": [
+                       {"target_sentence_idx": target, "condition": condition}
+                       for target, condition in spec.associations
+                   ],
                    "sample_idx": spec.sample_idx, "seed": spec.seed,
                    "prompt_sha256": prompt_hash(spec.prompt),
                    "config_hash": spec.config_hash, "input_hash": spec.input_hash,
@@ -251,12 +256,14 @@ def production_specs(trajectory: dict[str, Any], targets: list[dict[str, Any]],
         # join the same rollout to every association in this list.
         association = associations[0]
         prompt = identities[fork_idx]["prompt"]
+        association_values = tuple((item["target_sentence_idx"], item["condition"])
+                                   for item in associations)
         for sample_idx in range(samples_per_fork):
             seed = completion_seed(seed_root, trajectory["trajectory_id"], fork_idx, sample_idx)
             specs.append(CompletionSpec(trajectory["trajectory_id"],
                                         association["target_sentence_idx"], fork_idx,
                                         association["condition"], sample_idx, seed,
-                                        prompt, config_hash, input_hash))
+                                        prompt, config_hash, input_hash, association_values))
     return specs
 
 
