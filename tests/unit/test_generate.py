@@ -69,6 +69,13 @@ def test_backend_field_is_diagnostic_and_canonical_extraction_wins():
     assert parsed["backend_extraction_matches"] is False
 
 
+def test_backend_field_agreement_is_recorded_but_not_authoritative():
+    parsed = parse_response({"choices": [{"text": "Canonical sentence. Next.",
+                                           "first_replacement_sentence": "Canonical sentence."}]})
+    assert parsed["first_replacement_sentence"] == "Canonical sentence."
+    assert parsed["backend_extraction_matches"] is True
+
+
 def test_failed_extraction_cannot_count_as_similarity_support():
     counts = support_counts([
         {"extraction_status": "success", "first_replacement_sentence": "x", "similarity": .79},
