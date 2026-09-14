@@ -135,7 +135,7 @@ def run_fetch(
                 for record in records:
                     current = record["path"]
                     # Network I/O is off-thread so the owning main loop continues its heartbeat.
-                    # On graceful interruption, finish the current atomic unit before exiting.
+                    # On graceful interruption, retain incomplete units for quarantine on resume.
                     with ThreadPoolExecutor(max_workers=1) as pool:
                         kwargs = {"download": download} if download is not None else {}
                         stop_event = threading.Event()
@@ -154,6 +154,9 @@ def run_fetch(
                                 row = task.result(timeout=0.1)
                                 break
                             except TimeoutError:
+                                if task.done():
+                                    # Propagate an actual worker timeout.
+                                    task.result()
                                 try:
                                     runtime.pulse()
                                 except BaseException:

@@ -1,189 +1,115 @@
-# Continuation record — 2026-09-14
+# Continuation record — Stage 2 handoff, 2026-09-14
 
-## Objective and current state
+## Objective and next gate
 
-Implement the replay-first MVP in SPEC stage order. Stage 0 and Stage 1 implementation,
-validation and verified secondary backups are complete. **Stage 2 is now in progress:**
-discover and selectively fetch the pinned released traces, labels and Problem 4682
-correct-trajectory raw resamples. No dataset content or model weights have been downloaded
-by Stage 2 yet; only remote tree metadata was read.
+Implement the replay-first MVP in SPEC stage order. Stage 0 and Stage 1, including verified
+MacBook backups, are complete. Stage 2 acquisition/validation is complete; its verified
+MacBook secondary-copy receipt is the next gate. **Do not start Stage 3 until that gate
+is recorded. GPU stages remain explicitly paused.**
 
-Repository: `/home/ubuntu/preanchor-repo`. Persistent experiment root:
-`/lambda/nfs/preanchor/preanchor`. Branch: `codex/mvp`, HEAD `fbe40e1`.
-The tracked tree was clean at Stage 1 handoff. At this record's creation, **untracked
-Stage 2 work exists in `src/preanchor/data/`**; this continuation file is also new.
-Do not describe the current working tree as clean or discard the uncommitted work.
+Read `AGENTS.md`, `IMPLEMENTATION_SPEC.md`, then `research/project-brief.md`; disk artifacts,
+committed validation records and manifests outrank this summary. Never modify AGENTS.
+Repository `/home/ubuntu/preanchor-repo`, branch `codex/mvp`; persistent root
+`/lambda/nfs/preanchor/preanchor`. `/home/ubuntu/preanchor` is a Lambda symlink.
+Use `git status` and `git log` for current source state; source is committed before backup.
 
-The latest user instruction authorizes writing this file only. No other file was modified
-for this continuation-record request. Subsequent implementation should resume under the
-previous Stage 2 authorization after the compaction/handoff.
+## Completed work and authoritative records
 
-## Authority and enduring constraints
+- Stage 0: `2852b60` bootstrap, `ad5758b` virtiofs guard correction; 26 tests.
+- Stage 1: `b002449` provenance/I/O/runtime/tracking, `fbe40e1` validation/status; 41 tests.
+- Stage 2 execution: clean `700d34899bb6e195d76702bed7acad93e1ad9f3c`.
+  The subsequent commit containing this record fixes worker-timeout propagation, adds
+  regression coverage and records final evidence. Final suite: 61 tests, Ruff pass.
+- Read `docs/stage0_validation.md`, `docs/stage1_validation.md`, `docs/stage2_validation.md`,
+  `docs/decisions.md`, `docs/upstream_audit.md`, `docs/environment_deviations.md`.
+- Stage 2 adds `data/fetch.py`, `data/stage.py`, exact `configs/locks/dataset_*`, fetch and
+  validate-download CLI, CPU scope/hash/resume tests, `scripts/stage2_smoke.py` and
+  `scripts/prepare_stage2_backup.py`. AGENTS, frozen science, uv.lock and submodules unchanged.
 
-Read `AGENTS.md`, `IMPLEMENTATION_SPEC.md`, then `research/project-brief.md`; all three
-were read completely before original implementation. Repository documents, committed
-validation records and stored artifacts outrank this summary. Do not modify AGENTS.
-The brief owns the research question/estimand; SPEC owns the detailed execution plan.
+Stage 2 persistent runs under PREANCHOR_ROOT/artifacts/runs:
 
-- Preserve the passive, offline, correlational experiment. No training/reward use.
-- Frozen science is in `configs/mvp.yaml` and `configs/splits/mvp_20_v1.yaml`: exact model,
-  revisions, BF16/no quantization, context, twenty problems and 12/4/4 grouped split,
-  sentence eligibility/convergence, canonical KL and audit gate, training-only anchor
-  thresholds, pre-emission timing and 49 sites, observable allow-list, linear/logistic
-  probes, CV/selection, primary metric and all required controls. Read the files rather
-  than reconstructing values from memory. Changes require the amendment record, new
-  resolved-config hash/run ID and user approval before execution.
-- Exact stored-trace tokenization once; overlapping target token excluded from prefix;
-  boundary is target-token-start minus one. Layer 0 is embedding output, 1–48 are block
-  outputs before final norm. No target/future/completed-length/correctness primary inputs.
-- Canonical importance is smoothed KL(without || with) over normalized answer-category
-  union including NO_ANSWER. Released labels require the Problem 4682 audit gate.
-- Problem-grouped splits; fold-local fitting; validation-only calibration; no test
-  metrics before frozen selection; one frozen-hash test evaluation. Four held-out
-  problems remain an exploratory engineering test. Never hide negative findings.
-- Follow minimal example → schema/checksum validation → smoke → kill/resume → scale.
-  Unit/integration tests before commits, relevant tests after changes, scientific gates
-  before MVP-scale work. No test weakening. Maintain decisions and alternative explanations.
-- Persist valuable state under PREANCHOR_ROOT; never delete persistent data without
-  explicit authorization. Atomic checksummed outputs, stable identities, immutable
-  completed units, quarantine corruption and validate resume config/code/input hashes.
-- Long jobs detached in tmux, main-loop heartbeat every 30 seconds. CPU stages hide CUDA.
-  Required benchmarks/projections must precede Stage 5, Stage 7 and >1-hour jobs; no
-  runtime/cost beyond authorization. Hourly rate and compute budget are still unspecified.
-- Never provision/resize/terminate infrastructure, issue shutdown, expose public services,
-  push/merge/publish/send messages or modify upstream without the relevant explicit approval.
-  No root SUCCESS or SAFE_TO_TERMINATE until the complete MVP and backup gates hold.
-- Upstreams stay pinned and untouched; MIT notices were inspected. Secrets remain in
-  environment/untracked .env, never artifacts/logs/config/commits. No sub-agent delegation
-  is authorized or in use.
+- Smoke: `20260914T182859Z-1c085746e3-6c451e8c` — SIGTERM/SIGKILL, two partial quarantines,
+  completed hashes/mtimes unchanged, five verified files, no-op resume.
+- Full: `20260914T183017Z-1c085746e3-08bc1e7c` — all 306 files / 339,390,844 bytes,
+  177.497 seconds, 169,984,000-byte peak RAM; no-op resume creates 0/skips 306 and preserves
+  all 1,836 completed-unit files. GPU unused/unmeasured. Raw source manifest SHA-256:
+  `ff5c1d6d043db2d1f8a01b2c5152bb8139e17b8f1bd5f11cb360821baee65663`.
+- Minimal raw inspection and uncached benchmark: `artifacts/bootstrap/stage2-minimal/`.
+- Runs retain original code identity. Do not resume them under changed code. Stage 3
+  needs new provenance and explicit Stage 2 input hashes, not a forced identity update.
 
-## Completed milestones and durable evidence
+Commands executed: pinned tree discovery; singleton snapshot downloads; unit/integration
+and Stage 2 scientific tests; CPU doctor; detached tmux smoke and full fetch; complete
+source/hash validation and no-op resume. Full evidence hashes and exact commands are in
+`docs/stage2_validation.md` and the run manifests/attempt records.
 
-- `2852b60`: Stage 0 bootstrap on main; then created `codex/mvp`.
-- `ad5758b`: corrected persistent-mount guard for Codex virtiofs exposure.
-- `b002449`: Stage 1 manifests, IDs, atomic I/O, runtime, tracking, CLI and CPU smoke.
-- `fbe40e1`: persistent Stage 1 validation record and completed-heartbeat status correction.
+## Data findings and failed assumptions
 
-Read `docs/stage0_validation.md`, `docs/stage1_validation.md`, `docs/decisions.md`,
-`docs/environment_deviations.md`, `docs/lambda_runbook.md` and `docs/upstream_audit.md`.
-Stage 0 ended with 26 tests passing. Stage 1 ended with **41 tests passing**, Ruff and
-CPU doctor passing. Persistent SIGTERM and SIGKILL smoke preserved completed SHA-256
-and nanosecond mtimes, quarantined two partial units, created only two missing units,
-then completed a no-op resume. W&B sessions were offline and retained in the run.
+Exact selected prefix: `deepseek-r1-distill-qwen-14b/temperature_0.6_top_p_0.95`.
+Forty each of base_solution.json, chunks_labeled.json, chunks.json and problem.json;
+README; all 145 correct-4682 chunk_0..144/solutions.json forks. Other models, variants
+and combined Parquet exports excluded. Raw bytes were not transformed.
 
-Stage 1 run: `artifacts/runs/20260914T175938Z-fab7e8ae04-f1b5dc10` under PREANCHOR_ROOT.
-It is bound to clean source commit `b002449e87210655813cfd8d78c953f95a803b1b`; do not
-resume it under changed code. Its validation JSON hash is
-`89e5701ecf2321687127970f63a21b797057b44de9d927d00a70341d93984c8d`.
+Hub 0.33.4 types are in `huggingface_hub.hf_api`, not the package root. `chunks.json` is
+an object containing string chunks; labeled chunks are a list of objects. These draft
+assumptions failed in the minimal example and were fixed/tested; do not upgrade libraries.
+A worker TimeoutError must propagate instead of becoming an endless heartbeat poll.
 
-MacBook is the user-approved secondary destination, `~/preanchor-backups/`. **MacBook
-initiates SSH pulls; never SSH into or push to the MacBook.** Exclude caches and secrets.
+**Correction to the original handoff:** `vendor/thought-anchors/selected_problems.json`
+exists, has 106 records, and its first twenty IDs exactly match the frozen selection.
+It was inspected; do not repeat the earlier assertion of absence from the source checkout.
 
-Both secondary gates passed; receipts were matched against all persistent files:
+## Durable backups
 
-| Stage | Snapshot under PREANCHOR_ROOT/artifacts | Files | Manifest SHA-256 |
-| --- | --- | --- | --- |
-| 0 | `bootstrap/stage0-ad5758b7d2f9` | 6 | `dcd5417acca481bce61e1e50fbf79d2305f3f7f12b879ffb8877a03615f9c22c` |
-| 1 | `backups/stage1-20260914T175938Z-fab7e8ae04-f1b5dc10-fbe40e10` | 122 | `7dc74cfa250e5a4aded798faaf327819bff503cf7f13d68314578ffed07940f5` |
+MacBook is the verified secondary destination, `~/preanchor-backups/`; **Mac initiates
+SSH pulls. Never SSH into or push to it.** Exclude model/HF caches and secrets.
 
-Stage 1 user receipt: verified `2026-09-14T18:10:50.343230+00:00`, destination
-`/Users/cnm13ryan/preanchor-backups/stage1-20260914T175938Z-fab7e8ae04-f1b5dc10-fbe40e10`.
-It and its checksum were saved alongside the snapshot as
-`<snapshot-name>.secondary_receipt.json[.sha256]`. All 122 files were rehashed successfully
-at the start of Stage 2. Stage 1 backup is no longer pending, even if older validation
-documentation describes its state at the earlier handoff.
+Stage 0: six files, receipt verified 2026-09-14T17:37:27.331293+00:00, snapshot
+`artifacts/bootstrap/stage0-ad5758b7d2f9`, manifest
+`dcd5417acca481bce61e1e50fbf79d2305f3f7f12b879ffb8877a03615f9c22c`.
+Stage 1: 122 files, receipt verified 2026-09-14T18:10:50.343230+00:00, snapshot
+`artifacts/backups/stage1-20260914T175938Z-fab7e8ae04-f1b5dc10-fbe40e10`, manifest
+`7dc74cfa250e5a4aded798faaf327819bff503cf7f13d68314578ffed07940f5`.
+Checksummed user receipts are beside their persistent snapshots.
+Stage 2 snapshot is prepared by `scripts/prepare_stage2_backup.py FULL_RUN SMOKE_RUN`
+after committing this record; inspect `artifacts/backups/stage2-*` for exact identifier.
+A prepared snapshot is not secondary verification. Wait for the Mac receipt.
 
-## Environment decisions and unresolved GPU issue
+## Invariants and unresolved issues
 
-`/home/ubuntu/preanchor` is a Lambda symlink; the actual checkout path differs intentionally.
-Codex exposes the designated persistent mount as virtiofs. Native-NFS-only checks were
-too narrow; current guards require a dedicated writable mount beneath `/lambda/nfs` and
-recognize native NFS or virtiofs, retaining checksum validation.
-
-Host SSH `nvidia-smi` works according to the user; the earlier Codex sandbox invocation
-failed. **This is not evidence of a host-driver failure. GPU-dependent stages remain
-paused until host/Codex access is resolved with the user.** The current tool profile is
-unrestricted filesystem/network with approval policy never; do not pass sandbox_permissions.
-This permission change does not waive scientific or GPU gates. Do not repair drivers/CUDA.
-
-Python 3.11.16 is in `/tmp/preanchor-python`, uv cache in `/tmp/preanchor-uv-cache`, and
-the ignored `.venv` is installed with CPU/base/dev dependencies. Use `.venv/bin/python`
-or `UV_CACHE_DIR=/tmp/preanchor-uv-cache UV_PYTHON_INSTALL_DIR=/tmp/preanchor-python uv ...`.
-GPU extra is not installed. No dependency pins changed; uv.lock SHA-256:
-`1126f52ae681e23abc08981934af3fc2a43470da54f68ce021a38a044bd55778`.
-
-## Stage 2 work, commands and findings
-
-Created, **uncommitted and not yet validated**:
-
-- `src/preanchor/data/__init__.py`
-- `src/preanchor/data/fetch.py`: draft discovery/allowlist validation, upstream Git/LFS
-  checks, source shape checks and per-file UnitStore download wrapper. Read before editing.
-
-Successful read-only calls used pinned `HfApi.list_repo_tree` for dataset
-`uzaymacar/math-rollouts`, revision `a3a2fe1eb6d52e6ef81860baff018a8df2eb8ae2`.
-Observed root: README.md, .gitattributes, data/, Qwen-14B and Llama-8B directories.
-The `data/` directory contains a large 183-shard combined Parquet export; **do not fetch it**.
-
-Selected prefix:
-`deepseek-r1-distill-qwen-14b/temperature_0.6_top_p_0.95`.
-It contains correct/incorrect base directories plus forced-answer/sanity variants.
-Use only `correct_base_solution` and `incorrect_base_solution`. The correct directory
-listing matched the specified twenty problems. Full two-kind coverage is still to validate.
-
-Observed `correct_base_solution/problem_4682` has 149 immediate entries including:
-
-- `base_solution.json` (21,954 bytes)
-- `chunks.json` (30,904 bytes)
-- `chunks_labeled.json` (93,693 bytes)
-- `problem.json` (810 bytes)
-- chunk directories; `chunk_0/solutions.json` is 3,302,151 bytes.
-
-No `selected_problems.json` was found in the inspected root or pinned source repository;
-do not invent one or claim an exhaustive search. Exact primary file coverage and audit
-fork count need the complete scoped discovery.
-
-The draft plans to allowlist four small primary/metadata files per trajectory, README,
-and all correct-4682 `chunk_*/solutions.json` files. Auxiliary `chunks.json`/`problem.json`
-support later import/audit. This draft choice still needs recorded rationale and validation.
-It excludes other models, sampling variants and combined Parquet exports. Downloads
-are planned through pinned `snapshot_download` with exact singleton allow_patterns,
-persistent HF cache and independently checksummed source copies.
-
-**Latest command failed before discovery executed:** importing the new module raised
-`ImportError: cannot import name 'RepoFile' from 'huggingface_hub'` with pinned Hub 0.33.4.
-Do not repeat that top-level import or change dependency versions to solve it. Inspect
-the installed API module; RepoFile/RepoFolder are likely available from
-`huggingface_hub.hf_api`. No generated `dataset_files.txt` or `dataset_metadata.json`
-exists yet; `configs/locks/` currently contains only `upstream.yaml`.
-
-Other failed approaches not to repeat: treating sandbox GPU failure as host failure;
-requiring native NFS fstype inside Codex; using default read-only uv cache under the old
-sandbox; marking a completed heartbeat stale merely because it is old. These were fixed
-and documented. The latest Stage 2 failure has not yet been fixed or tested.
+- Brief owns research question/estimand; SPEC owns detailed execution and stages.
+- Passive offline correlational probe, never training/reward. Frozen config choices need
+  amendment, new config hash/run and user approval before execution. Read actual configs.
+- Exact full-trace tokenization once; boundary target_token_start−1, overlapping token
+  excluded; layer0 embedding,1..48 block outputs pre-final-norm. No future/target features.
+- Canonical smoothed KL(without || with); released labels require 4682 audit. No labels
+  or probes have been scientifically validated yet. No test metrics inspected.
+- Problem-grouped splits, fold-local fitting/thresholds, validation-only calibration,
+  freeze before one test evaluation, four held-out problems exploratory. Nulls retained.
+- Minimal example → schema/checksum → smoke → kill/resume → scale. Unit/integration before
+  commits and relevant scientific gates before scale; later scientific tests unimplemented.
+- All valuable state under persistent root. Atomic hashes, immutable valid units, quarantine
+  partial/corrupt work, strict code/config/input resume identity. No persistent deletion.
+- Long jobs tmux; heartbeat main loop every30s; W&B offline records backed up. No secrets
+  in outputs, no model caches in backups, no raw activation uploads.
+- Host SSH nvidia-smi works per user; earlier Codex sandbox check failed. This is tooling
+  context, not a host-driver failure. Stop before GPU checks/stages to agree execution.
+  Permission-profile changes do not waive this gate. Never repair drivers or CUDA.
+- Manual infrastructure only; no create/resize/terminate/shutdown; no push/merge/publish
+  or messages without user approval; no sub-agent delegation requested.
+- Benchmarks/projections before Stages5/7 and >1h jobs; hourly rate/runtime/budget remain
+  unspecified. Stage2 conservative projection was19.6min; actual fetch was3min.
+- No run-root SUCCESS or SAFE_TO_TERMINATE before complete MVP/backup gates.
+- Python3.11.16 tools in /tmp/preanchor-python, uv cache /tmp/preanchor-uv-cache; ignored
+  .venv has CPU/base/dev only. GPU extra not installed. uv.lock hash unchanged:
+  `1126f52ae681e23abc08981934af3fc2a43470da54f68ce021a38a044bd55778`.
 
 ## Exact next actions
 
-1. Re-read authoritative disk state and `git status`; preserve the untracked draft.
-   Record the verified Stage 1 receipt in decisions/validation status during normal work.
-2. Fix the Hub type imports using installed pinned source. Remove unused imports and
-   check other draft API assumptions; do not upgrade packages.
-3. Run scoped discovery, validate both trace kinds for all twenty IDs, exact audit forks,
-   source sizes and upstream hashes. Write/review `configs/locks/dataset_files.txt` and
-   metadata/checksums. No wildcard or whole-repository content download.
-4. Download the smallest representative file(s) with an explicit allowlist; inspect raw
-   object/list schemas without performing Stage 3 import or Stage 4 label analysis.
-   Fix draft shape assumptions using evidence. Measure throughput/size before deciding
-   full download duration; if >1 hour, apply the required projection/authorization gate.
-5. Implement/tests for Stage 2 CLI `fetch --discover`, `fetch [--resume]`, and
-   `validate-download`, integrating existing manifests, run identity, main-loop heartbeat,
-   signals, failure records and tracking. Existing CLI has no Stage 2 commands yet.
-6. Test exact pins, coverage, forbidden paths, hashes, interrupted downloads, corruption
-   quarantine and non-rewriting resume. Run unit/integration before milestone commits;
-   follow applicable scientific/scale gates without claiming unimplemented tests passed.
-7. Commit validated code/allowlist, create a new run bound to it, then run the small smoke
-   and kill/resume on persistent storage before the full authorized Stage 2 download.
-   Long jobs detached in tmux. Validate source manifest and every completed source file.
-8. Record Stage 2 evidence and prepare a MacBook-pull backup (existing backup preparers
-   are stage-specific and need an appropriate Stage 2 implementation). Await its verified
-   receipt at the stage gate. GPU work remains paused throughout.
+1. Verify current Git/artifact state and Stage2 snapshot identifier/checksums.
+2. Obtain user-provided MacBook pull verification receipt; rehash primary snapshot,
+   match count/manifest digest, save checksummed receipt and update gate records.
+3. Then start SPEC Stage3 minimally: inspect upstream splitter/answer helpers and raw
+   schemas; retain MIT notices for ports; implement import/segmentation/exact sequential
+   alignment, pinned tokenization and pilot target text mapping under existing gates.
+4. Do not skip to labels, generation or extraction. GPU-dependent work stays paused.

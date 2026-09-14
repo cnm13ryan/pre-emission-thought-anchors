@@ -30,3 +30,11 @@ with `.venv/bin/python scripts/prepare_stage1_backup.py RUN_ID`. Run the snapsho
 `pull_artifacts.sh` on the MacBook exactly as for Stage 0; return the emitted receipt.
 This is a stage-specific backup implementation. Later dataset/model stages have not
 been admitted or implemented, and termination markers remain prohibited.
+
+Stage 2 now provides pinned `fetch --discover`, `fetch [--resume --run-id ID]`,
+`fetch --smoke`, and `validate-download --run-id ID`. Explicit run IDs prevent ambiguous
+resume. Code/config/input identities must match; completed historical runs are not
+resumable under a new commit. The stage backup helper is
+`scripts/prepare_stage2_backup.py FULL_RUN_ID SMOKE_RUN_ID`; it retains both runs and
+minimal inspection evidence, excluding HF caches. See `docs/stage2_validation.md` for
+current identifiers. Await the MacBook verification receipt before Stage 3.
