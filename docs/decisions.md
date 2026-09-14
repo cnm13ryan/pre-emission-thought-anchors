@@ -134,5 +134,6 @@ Stage 3/4 (working tree after `060f6c0`):
   `(trajectory_id, fork_idx, sample_idx, seed, prompt_hash, config_hash, input_hash)`;
   target sentence and condition remain association metadata. The production planner
   emits one job per unique fork/sample and exposes all target associations for label
-  assembly, including shared adaptive extensions. Rejected alternative: retaining
+  assembly, including shared adaptive extensions (implementation commits `feca1dd`,
+  `5baa359`). Rejected alternative: retaining
   target/condition in the rollout key, which would duplicate shared forks.
