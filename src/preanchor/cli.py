@@ -212,5 +212,84 @@ def validate_data_command() -> None:
                            "unresolved": 0}))
 
 
+@app.command("pilot-labels")
+def pilot_labels_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/pilot.yaml"),
+    benchmark_only: Annotated[int | None, typer.Option("--benchmark-only", min=1)] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+) -> None:
+    """Generate resumable Problem 4682 completions; benchmark outputs are isolated."""
+    if benchmark_only is None and not resume:
+        raise typer.BadParameter("production pilot requires --resume after benchmark projection")
+    import statistics
+    import time
+
+    import pyarrow.parquet as pq
+    import yaml
+
+    from preanchor.io import write_json
+    from preanchor.labels.generate import (
+        CompletionStore,
+        VLLMBackend,
+        benchmark,
+        prompt_hash,
+        tokenizer_identity_check,
+    )
+
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    loaded = load_config(config)
+    trajectory_rows = pq.read_table(root / "data/processed/stage3/trajectories.parquet").to_pylist()
+    trajectory = next((r for r in trajectory_rows if r["trajectory_id"] == "4682:correct"), None)
+    if trajectory is None:
+        raise typer.BadParameter("missing processed 4682:correct trajectory")
+    sentences = pq.read_table(root / "data/processed/stage3/sentences.parquet").to_pylist()
+    trajectory["sentence_boundaries"] = {
+        str(r["sentence_idx"]): int(r["char_start"])
+        for r in sentences if r["trajectory_id"] == "4682:correct"
+    }
+    targets = yaml.safe_load((repo / "configs/pilot_targets_4682.yaml").read_text())["targets"]
+    target_indices = [int(x["sentence_idx"]) for x in targets]
+    run = create_run(root, repo, loaded, ["preanchor pilot-labels --benchmark-only"])
+    stage = run / "stages/stage5"
+    unit_root = stage / ("benchmark_units" if benchmark_only is not None else "units")
+    backend = VLLMBackend(endpoint=loaded.generation.get("endpoint", "http://127.0.0.1:8000"))
+    if benchmark_only is not None:
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            loaded.model.id, revision=loaded.model.revision, trust_remote_code=False)
+        check_prompt = trajectory["prompt"]
+        host_count = len(tokenizer(check_prompt, add_special_tokens=True)["input_ids"])
+        backend_count = backend.tokenize(check_prompt)
+        tokenizer_identity_check(host_count=host_count, backend_count=backend_count,
+                                 tokenizer_id=loaded.model.id,
+                                 tokenizer_revision=loaded.model.tokenizer_revision,
+                                 prompt_sha256=prompt_hash(check_prompt))
+    started = time.perf_counter()
+    rows = benchmark(backend, CompletionStore(unit_root), trajectory, target_indices,
+                     count=benchmark_only or 0, seed_root=loaded.seed_root,
+                     config_hash=loaded.resolved_hash(), input_hash=trajectory["full_cot_sha256"],
+                     max_tokens=loaded.generation["max_new_tokens"],
+                     temperature=loaded.generation["temperature"], top_p=loaded.generation["top_p"])
+    elapsed = time.perf_counter() - started
+    rates = [r["generated_token_count"] / max(float(r.get("runtime_seconds", 0.0)), 1e-9)
+             for r in rows]
+    projection = {"schema_version": 1, "status": "benchmark_complete", "run_id": run.name,
+                  "code_config_hash": loaded.resolved_hash(), "model": {
+                      "id": loaded.model.id, "revision": loaded.model.revision,
+                      "dtype": loaded.model.dtype}, "benchmark_completion_count": len(rows),
+                  "elapsed_seconds": elapsed,
+                  "generated_tokens": sum(r["generated_token_count"] for r in rows),
+                  "decode_tokens_per_second": {
+                      "median": statistics.median(rates) if rates else 0.0},
+                  "analytical_roofline": {"hbm_tb_per_s": 1.555, "ideal_decode_tokens_per_s": 52.6},
+                  "production_started": False}
+    write_json(stage / "resource_projection.json", projection)
+    typer.echo(json.dumps({"run_id": run.name, "stage": str(stage), "rows": len(rows),
+                           "elapsed_seconds": elapsed,
+                           "projection": str(stage / "resource_projection.json")}, sort_keys=True))
+
+
 if __name__ == "__main__":
     app()
