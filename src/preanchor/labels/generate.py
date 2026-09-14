@@ -7,6 +7,7 @@ Each completion is an immutable work unit and is never rewritten on resume.
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -177,6 +178,7 @@ class VLLMBackend:
 
     def complete(self, prompt: str, *, seed: int, max_tokens: int,
                  temperature: float, top_p: float) -> dict[str, Any]:
+        before = self.metrics()
         started = time.perf_counter()
         response = httpx.post(f"{self.endpoint}/v1/completions", json={
             "model": self.model, "prompt": prompt, "max_tokens": max_tokens,
@@ -187,9 +189,33 @@ class VLLMBackend:
         result["runtime_seconds"] = time.perf_counter() - started
         result["backend"] = self.name
         result["image_digest"] = self.image_digest
+        after = self.metrics()
+        delta = {k: after[k] - before[k] for k in before.keys() & after.keys()}
+        result["backend_metric_deltas"] = delta
+        result["decode_seconds"] = delta.get("vllm:request_decode_time_seconds_sum")
+        result["prefill_seconds"] = delta.get("vllm:request_prefill_time_seconds_sum")
+        result["ttft_seconds"] = delta.get("vllm:time_to_first_token_seconds_sum")
         return result
 
+    def metrics(self) -> dict[str, float]:
+        try:
+            response = httpx.get(f"{self.endpoint}/metrics", timeout=10)
+            response.raise_for_status()
+            result: dict[str, float] = {}
+            for line in response.text.splitlines():
+                if line.startswith("vllm:"):
+                    name, value = line.rsplit(" ", 1)
+                    name = name.split("{")[0]
+                    if name.endswith(("_sum", "_total")):
+                        result[name] = result.get(name, 0) + float(value)
+            return result
+        except (httpx.HTTPError, ValueError):
+            return {}  # Missing telemetry is explicit, never fabricated timing.
+
     def tokenize(self, prompt: str) -> int:
+        return len(self.tokenize_ids(prompt))
+
+    def tokenize_ids(self, prompt: str) -> list[int]:
         response = httpx.post(f"{self.endpoint}/tokenize", json={
             "model": self.model, "prompt": prompt,
         }, timeout=30)
@@ -198,7 +224,7 @@ class VLLMBackend:
         tokens = payload.get("tokens")
         if not isinstance(tokens, list):
             raise ValueError("vLLM tokenize response missing tokens")
-        return len(tokens)
+        return tokens
 
 
 class FakeBackend:
@@ -265,7 +291,8 @@ def support_counts(rows: list[dict[str, Any]], threshold: float = 0.8,
                 similarity_failed += 1
                 continue
             similarity = matches[0].get("similarity")
-        if not isinstance(similarity, (int, float)):
+        if (not isinstance(similarity, (int, float)) or isinstance(similarity, bool)
+                or not math.isfinite(similarity)):
             similarity_failed += 1
             continue
         scored += 1
@@ -302,6 +329,8 @@ class CompletionSpec:
 class CompletionStore:
     def __init__(self, root: Path):
         self.units = UnitStore(root)
+        # Preserve expensive model output independently of derived scoring.
+        self.raw_units = UnitStore(root.parent / (root.name + "_raw"))
 
     def run_one(self, spec: CompletionSpec, backend: Backend, *, max_tokens: int,
                 temperature: float, top_p: float,
@@ -309,8 +338,12 @@ class CompletionStore:
                 reference_texts: dict[int, str] | None = None) -> tuple[dict, bool]:
         key = spec.rollout_id
         def writer(directory: Path) -> None:
-            result = backend.complete(spec.prompt, seed=spec.seed, max_tokens=max_tokens,
-                                      temperature=temperature, top_p=top_p)
+            def raw_writer(raw_directory: Path) -> None:
+                result = backend.complete(spec.prompt, seed=spec.seed, max_tokens=max_tokens,
+                                          temperature=temperature, top_p=top_p)
+                write_json(raw_directory / "response.json", result)
+            raw_directory, _ = self.raw_units.produce(key, raw_writer)
+            result = read_json(raw_directory / "response.json")
             extraction = extract_first_replacement_sentence(result.get("raw_answer"))
             association_scores: list[dict[str, Any]] = []
             if extraction.success and similarity_scorer is not None and reference_texts is not None:
@@ -320,9 +353,12 @@ class CompletionStore:
                     if reference is None:
                         raise ValueError(f"missing reference sentence {target_idx}")
                     score = similarity_scorer.score(reference, extraction.text or "")
+                    if not math.isfinite(score):
+                        raise ValueError("Nonfinite similarity; raw generation is retained")
                     association_scores.append({
                         "target_sentence_idx": target_idx, "condition": condition,
                         "similarity": score, "is_dissimilar": is_dissimilar(score),
+                        "reference_sha256": prompt_hash(reference),
                     })
             primary_score = association_scores[0]["similarity"] if association_scores else None
             row = {**result, "schema_version": 1, "rollout_id": key,
@@ -337,6 +373,9 @@ class CompletionStore:
                    "prompt_sha256": prompt_hash(spec.prompt),
                    "config_hash": spec.config_hash, "input_hash": spec.input_hash,
                    "model_id": MODEL_ID, "model_revision": MODEL_REVISION,
+                   "output_sha256": prompt_hash(result["raw_answer"]),
+                   "generation_status": "success",
+                   "similarity_status": "success" if association_scores else "not_scored",
                    "status": "complete",
                    "first_replacement_sentence": extraction.text,
                    "association_similarity": association_scores,

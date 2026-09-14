@@ -157,3 +157,23 @@ Stage 3/4 (working tree after `060f6c0`):
   is invalid support, never an implicit similar/dissimilar sample. Rejected
   alternative: trusting optional backend fields or converting failed output to a
   binary similarity decision.
+# Stage 5 production admission controls (2026-09-14)
+
+- **fact** — At parent `a6bf11f124297124e14e583aa6ecde15336f7c9e`, the CLI
+  created a new run on every `--resume`, validated token counts only in benchmark
+  mode, and lacked periodic generation checkpoints and a budget stop. Existing
+  95-test coverage did not establish these long-run properties.
+- **choice** — The implementation in the commit introducing this entry uses an
+  explicit prepared run ID, existing manifest compatibility checks, a base-only
+  256-job guard, exact token-ID comparison for each fork, the existing Runtime
+  heartbeat and W&B fallback, and 15-minute incremental primary checkpoints.
+  Rejected alternative: launching the old CLI based solely on passing unit tests.
+- **choice** — Persist the raw generated response as a separate immutable unit
+  before derived extraction/scoring. A scoring interruption reuses this raw
+  response; valid completed samples remain unchanged. Nonfinite similarity is a
+  failure, never support. No scientific definition or generation parameter changed.
+- **fact** — User authorized base samples 0–31 only, with a stop if the projection
+  after 32 completions exceeds 10 hours or $20. Adaptive samples remain unapproved.
+  More than 5% truncation also stops for diagnosis. Existing benchmark measurements
+  are reused because prompt/model/sampling semantics are unchanged.
+- **fact** — Draft PR #2 is stacked on codex/mvp; PR #1 remains unchanged.

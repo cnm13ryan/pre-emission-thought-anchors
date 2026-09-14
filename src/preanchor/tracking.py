@@ -6,14 +6,14 @@ from pathlib import Path
 from preanchor.logging import redact
 
 
-def start_tracking(directory: Path, manifest: dict, config):
+def start_tracking(directory: Path, manifest: dict, config, *, stage="stage1"):
     import wandb
 
     mode = os.environ.get("WANDB_MODE", config.tracking.wandb_mode)
     if mode != "online" or not os.environ.get("WANDB_API_KEY"):
         mode = "offline"
     kwargs = {"project": config.tracking.wandb_project, "group": manifest["run_id"],
-              "job_type": "stage1", "dir": str(directory / "logs"),
+              "job_type": stage, "dir": str(directory / "logs"),
               "config": redact({"run_id": manifest["run_id"], "identity": manifest["identity"],
                                 "resolved_config": config.model_dump(mode="json")}),
               # Stage 1 is CPU-only; defer automatic hardware probing to the GPU admission gate.
