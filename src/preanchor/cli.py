@@ -217,10 +217,21 @@ def pilot_labels_command(
     config: Annotated[Path, typer.Option()] = Path("configs/pilot.yaml"),
     benchmark_only: Annotated[int | None, typer.Option("--benchmark-only", min=1)] = None,
     resume: Annotated[bool, typer.Option()] = False,
+    base_only: Annotated[bool, typer.Option()] = False,
+    run_id: Annotated[str | None, typer.Option()] = None,
 ) -> None:
     """Generate resumable Problem 4682 completions; benchmark outputs are isolated."""
     if benchmark_only is None and not resume:
         raise typer.BadParameter("production pilot requires --resume after benchmark projection")
+    if benchmark_only is None:
+        if not base_only or not run_id or Path(run_id).name != run_id:
+            raise typer.BadParameter("Production requires --base-only --resume --run-id")
+        from preanchor.labels.pilot import execute
+
+        root = Settings().persistent_root()
+        execute(root, Path(__file__).resolve().parents[2], config,
+                root / "artifacts/runs" / run_id)
+        return
     import statistics
     import time
 
