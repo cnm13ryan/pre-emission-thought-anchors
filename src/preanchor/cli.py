@@ -260,12 +260,18 @@ def pilot_labels_command(
         tokenizer = AutoTokenizer.from_pretrained(
             loaded.model.id, revision=loaded.model.revision, trust_remote_code=False)
         check_prompt = trajectory["prompt"]
-        host_count = len(tokenizer(check_prompt, add_special_tokens=True)["input_ids"])
+        # vLLM's raw completion endpoint tokenizes the supplied prompt without
+        # injecting BOS/EOS. Validate that exact behavior; never alter prompts
+        # or apply a chat template to hide a mismatch.
+        host_count = len(tokenizer(check_prompt, add_special_tokens=False)["input_ids"])
         backend_count = backend.tokenize(check_prompt)
-        tokenizer_identity_check(host_count=host_count, backend_count=backend_count,
-                                 tokenizer_id=loaded.model.id,
-                                 tokenizer_revision=loaded.model.tokenizer_revision,
-                                 prompt_sha256=prompt_hash(check_prompt))
+        token_record = tokenizer_identity_check(
+            host_count=host_count, backend_count=backend_count,
+            tokenizer_id=loaded.model.id,
+            tokenizer_revision=loaded.model.tokenizer_revision,
+            prompt_sha256=prompt_hash(check_prompt),
+            special_tokens={"add_special_tokens": False, "chat_template": None})
+        write_json(stage / "tokenizer_validation.json", token_record)
     started = time.perf_counter()
     rows = benchmark(backend, CompletionStore(unit_root), trajectory, target_indices,
                      count=benchmark_only or 0, seed_root=loaded.seed_root,
