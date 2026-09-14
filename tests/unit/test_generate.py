@@ -80,6 +80,16 @@ def test_failed_extraction_cannot_count_as_similarity_support():
                       "failed_extraction": 1, "failed_similarity": 1}
 
 
+def test_support_counts_selects_shared_fork_without_association():
+    row = {"extraction_status": "success", "first_replacement_sentence": "x",
+           "similarity": .81, "association_similarity": [
+               {"target_sentence_idx": 12, "condition": "with", "similarity": .81},
+               {"target_sentence_idx": 13, "condition": "without", "similarity": .79},
+           ]}
+    counts = support_counts([row], target_sentence_idx=13, condition="without")
+    assert counts["valid_similarity"] == 1 and counts["dissimilar_valid"] == 1
+
+
 def test_completion_store_persists_canonical_extraction(tmp_path: Path):
     spec = CompletionSpec("t", 6, 6, "without", 0, 1, "P", "c", "i")
     row, _ = CompletionStore(tmp_path / "units").run_one(
