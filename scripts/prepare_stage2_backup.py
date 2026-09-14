@@ -49,6 +49,14 @@ def main():
             directory / "stages/stage2/source_manifest.json"
         ):
             raise ValueError("Source manifest mismatch")
+        validated = read_json(directory / "stages/stage2/download_validation.json")
+        if (
+            validated["state"] != "passed"
+            or validated["smoke"]
+            or validated["source_manifest_sha256"] != completion["source_manifest_sha256"]
+            or validated["files"] != len(result["files"])
+        ):
+            raise ValueError("Full download validation is missing or inconsistent")
         for row in result["files"]:
             UnitStore(directory / "stages/stage2/units").validate(row["unit_key"])
         smoke = root / "artifacts/runs" / args.smoke_run_id
@@ -58,7 +66,9 @@ def main():
         if validation["state"] != "passed":
             raise SystemExit("Persistent interruption/resume validation is missing")
         # Evidence runs retain their original code identity; inspect checksummed stage records.
-        read_json(smoke / "stages/stage2/source_manifest.json")
+        smoke_sources = read_json(smoke / "stages/stage2/source_manifest.json")
+        for row in smoke_sources["files"]:
+            UnitStore(smoke / "stages/stage2/units").validate(row["unit_key"])
         snapshot.mkdir(parents=True, exist_ok=False)
         for origin, label in [
             (directory, "run"),

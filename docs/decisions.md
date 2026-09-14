@@ -70,8 +70,9 @@ Stage 2 (base commit `fbe40e1`; implementation commit adds `data/stage.py`):
   to preserve exact source segmentation and problem metadata for Stage 3. These add small
   auxiliary source files without changing the forty trajectories or scientific choices.
 - **fact:** `selected_problems.json` was absent from the inspected dataset root and selected
-  trajectory directories and pinned source checkout. The explicit frozen split remains
-  authoritative; no substitute file or current-main revision was fetched.
+  trajectory directories. A subsequent filesystem search found it in the pinned source
+  checkout (106 records); its first twenty IDs exactly match the frozen set. The earlier
+  handoff assertion of absence from the checkout was incorrect. No selection changed.
 - **fact:** Hub 0.33.4 exports RepoFile/RepoFolder in `huggingface_hub.hf_api`, not the package
   root. `chunks.json` is an object containing string chunks; `chunks_labeled.json` is a
   list of objects. Minimal raw inspection exposed both draft assumptions before scale.
@@ -88,3 +89,10 @@ Stage 2 (base commit `fbe40e1`; implementation commit adds `data/stage.py`):
   under one hour. A current-commit smoke measurement precedes the complete fetch; if its
   conservative projection reaches one hour, stop for the required cost/runtime gate.
   No GPU or model weights are needed; hourly GPU rate/budget remain unspecified.
+
+- **fact (execution commit `700d348`):** the persistent five-file smoke passed SIGTERM,
+  SIGKILL, partial quarantine and unchanged hashes/mtimes. The full 306-file fetch and
+  no-op resume passed. A final error-path review found that a worker TimeoutError could
+  be mistaken for a polling timeout; propagate completed-future exceptions, covered by
+  a failure/resume regression. No download timeout occurred in the completed run.
+  Rejected alternative: spinning indefinitely after a failed network request.

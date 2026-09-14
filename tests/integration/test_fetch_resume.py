@@ -92,7 +92,15 @@ def test_stage_resume_and_input_isolation(tmp_path, monkeypatch):
         return snapshot
 
     args = (directory, ROOT, config, tmp_path / "cache")
-    assert run_fetch(*args, tracking=False, download=download)["created"] == 1
+
+    def timeout_download(**kwargs):
+        raise TimeoutError("synthetic network timeout")
+
+    with pytest.raises(TimeoutError, match="synthetic network"):
+        run_fetch(*args, tracking=False, download=timeout_download)
+    assert load_manifest(directory)["stages"]["stage2"]["state"] == "failed"
+    assert (directory / "failure.json").is_file()
+    assert run_fetch(*args, resume=True, tracking=False, download=download)["created"] == 1
     assert run_fetch(*args, resume=True, tracking=False, download=download)["skipped"] == 1
     assert validate_download(directory, ROOT, config)["state"] == "passed"
     assert load_manifest(directory)["stages"]["stage2"]["state"] == "complete"
