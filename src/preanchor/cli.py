@@ -6,6 +6,7 @@ from typing import Annotated
 
 import typer
 
+from preanchor.backup.cli import backup_app, restore_app
 from preanchor.config import Settings, load_config
 from preanchor.doctor import run_doctor
 from preanchor.logging import configure_logging, redact
@@ -15,6 +16,8 @@ from preanchor.smoke import run_smoke
 from preanchor.storage import persistent_mount
 
 app = typer.Typer(no_args_is_help=True, help="Passive offline thought-anchor experiment.")
+app.add_typer(backup_app, name="backup")
+app.add_typer(restore_app, name="restore")
 
 
 @app.callback()

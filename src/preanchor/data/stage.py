@@ -11,7 +11,15 @@ from pathlib import Path
 from preanchor.config import config_hash
 from preanchor.data.fetch import fetch_file, load_discovery, source_key, validate_source
 from preanchor.ids import file_hash
-from preanchor.io import UnitStore, atomic_bytes, json_bytes, lock, read_json, write_json
+from preanchor.io import (
+    UnitStore,
+    atomic_bytes,
+    json_bytes,
+    lock,
+    read_json,
+    same_logical_path,
+    write_json,
+)
 from preanchor.logging import redact
 from preanchor.manifest import check_resume, save_manifest, utc_now
 from preanchor.runtime import Runtime
@@ -49,7 +57,7 @@ def validate_download(directory, repo, config):
         path = stage / "units" / key / Path(record["path"]).name
         if (
             row["unit_key"] != key
-            or row["local_path"] != str(path)
+            or not same_logical_path(row["local_path"], path, directory)
             or any(row[k] != v for k, v in record.items())
             or validate_source(path, record) != row["sha256"]
         ):
