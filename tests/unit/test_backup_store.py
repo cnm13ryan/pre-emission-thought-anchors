@@ -169,6 +169,7 @@ def test_stage_closure_follows_actual_dependencies():
     assert stage_closure(3) == (3,)
     assert stage_closure(4) == (3, 4)
     assert stage_closure(5) == (3, 5)          # Stage 5 hashes Stage 3, not Stage 4
+    assert stage_closure(9) == (3, 4, 5, 6, 7, 8, 9)
     with pytest.raises(ValueError):
         stage_closure(12)          # no Stage 12 entry: unknown stages still fail closed
 
