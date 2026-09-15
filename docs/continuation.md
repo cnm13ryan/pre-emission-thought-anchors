@@ -129,3 +129,33 @@ Raw-derived sensitivity inputs were materialized at `data/processed/stage4/raw_s
 The user-authorized deletion gate was subsequently satisfied by verified primary and MacBook secondary backups. The exact raw `stage4_fallback/units/` directory was measured at 20,999,110,344 bytes and deleted; its parent run, manifests, processed outputs, caches, and backups were retained. The deletion, backup hashes, and reacquisition identity are recorded in the persistent `cleanup_record.json`. A lightweight read confirmed both Stage 4 processed Parquet tables remain readable.
 
 The MacBook independently verified the latest incremental backup. A final cleanup verification confirmed `stage4_fallback/units/` remains absent, the source manifest and reacquisition provenance remain present, no Stage 5–11 path directly depends on the deleted directory, and the 6,474 support units plus both processed Parquet artifacts remain readable and checksum-valid.
+
+## Stage 5 stopped-run backup checkpoint (2026-09-15; supersedes earlier next actions)
+
+Run `20260914T234335Z-7e8eef81dc-dbac130d`, executed at clean
+`8a466f10a5ac041858fe2eb6ca58cef8d84f8082`, stopped at the authorization guard
+at 2026-09-15T01:05:19Z. It is incomplete: 32/256 physical completions,
+all fork 6 sample indices 0–31, 188,400 generated tokens, one length truncation.
+The observed base projection was 36,685.411 seconds / $20.279, exceeding
+10 hours / $20. No adaptive generation or Stage 6–7 execution occurred.
+
+Final read-only validation independently checked raw and processed completion
+units, seeds, prompt/output hashes, model identity and 152 existing checksum
+sidecars. All passed. The original production and supervisor PIDs are absent,
+Docker lists no running containers, and nvidia-smi reports 0 MiB used.
+The original failure/status records are preserved, including their FAILED state;
+this is an operational budget stop, not a completed Stage 5 milestone.
+
+All run data remain under the persistent NFS run directory. Final evidence is
+`stopped_run_backup_validation.json`; `checksums.sha256` covers the final run
+payload. W&B offline state is included. Its externally linked core log was also
+copied into `logs/preserved_wandb_core_debug.log`; transfer uses rsync `-aL`
+to materialize diagnostic symlinks as portable files. No source data were deleted.
+The checksum inventory includes those logical alias paths.
+
+This closure changes documentation/provenance only, not execution code or frozen
+configuration. The run's execution commit remains unchanged. Push the closure
+commit, transfer the entire run to `~/preanchor-backups/` on the MacBook, and
+verify every checksum there. Secondary verification is pending; do not create
+SAFE_TO_TERMINATE or restart vLLM/Stage 5. Resume requires explicit authorization
+and reconciliation of the original code/config/input identity; never bypass it.
