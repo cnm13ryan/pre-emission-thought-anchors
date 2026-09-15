@@ -79,7 +79,8 @@ def synthetic_corpus(config) -> tuple[list[dict], list[dict], list[dict]]:
                 labels.append({**row, "exclusion_reason": None if i < 14 else "final_answer",
                                "importance_legacy": 0.1, "importance_canonical": 0.1,
                                "label_source": "canonical_fallback", "importance_log1p": 0.09,
-                               "eligible_k4": i < 12, "anchor": i == 3})
+                               "eligible_k4": i < 12, "anchor_threshold": 0.5,
+                               "anchor": i == 3})
     return trajectories, sentences, labels
 
 
