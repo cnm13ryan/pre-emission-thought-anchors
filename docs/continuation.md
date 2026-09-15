@@ -410,4 +410,24 @@ PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage10 PREANCHOR_REMOTE_CMD='/home
 
 Only `BACKUP VERIFIED` plus a `pull_verification` receipt for that bundle satisfies the
 Stage 10 backup gate; none is claimed here.
+
+## Stage 10 portable backup (2026-09-15, session `20260915T221056Z-backup-cc4c216b`)
+
+Bundle `20260915T221329Z-19f7aef31d0529f4c08e8fde166351fec0cf95953135ce20199509e80e094872`
+(`--for-stage 10`, canonical, 6,666 entries, 3.79 GB logical, 217 new objects / 18.5 MB,
+6,107 reused) is prepared, locally verified and restore-verified into
+`/lambda/nfs/preanchor/restore-test-stage10-cc4c216b` (`docs/stage10_validation.md`,
+"Portable backup"). Canonical Stage 8/9/10 bytes are identical before and after. Stage 10
+was not rerun, Stage 11 was not started, no GPU lease was taken. **Primary-only until the
+MacBook pull** (`--no-prepare` pulls `latest` = `19f7aef3…`):
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage10 \
+PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' \
+./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 10 --no-prepare
+```
+
+Require `BACKUP VERIFIED` and a `pull_verification` receipt for `19f7aef3…`. Stage 11 base:
+`4ff29e0` (this branch) or its integration descendant; Stage 11 reads the restored runs
+above and must not reopen any selection.
 The worker branch is pushed; integration into `codex/stage8`/`codex/mvp` is the integrator's.
