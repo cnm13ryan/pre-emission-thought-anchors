@@ -329,3 +329,20 @@ verified Stage 7 secondary copy and explicit authorisation. Stage 8 consumers re
 `data/processed/stage7/features.parquet` (primary features through
 `observables.PRIMARY_FEATURES`) and load activations one layer at a time through the
 table's `activation_run_id`/`shard_path`/`row_idx` pointers.
+
+## Control plane v0.1 (2026-09-15, branch `agent/ops/control-plane-v1-20260915-0bd79efc`)
+
+Base `f6ce263` (the `codex/stage7` closure). Adds `src/preanchor/control/` and the
+`preanchor agent ...` / `preanchor lease ...` commands documented in `docs/concurrency.md`;
+enforces `gpu:h100` in every model load, `gpu:h100`+`service:vllm` in
+`scripts/start_vllm.sh`, and `portable-store:writer` in `backup prepare` / `import-legacy`
+(auto-leased by the CLI, so the MacBook wrapper is unchanged). State lives under
+`$PREANCHOR_ROOT/control/` and is outside every scientific identity and every portable
+bundle. Validated with the CPU suites and a TEST-namespace drill on the real persistent
+root (transcript in `$PREANCHOR_ROOT/control/validation/`). From Stage 8 on: one agent
+session = one worker branch (`agent/stage8/<role>-<id>`) = one worktree; `codex/stage8` has
+one integrator. The branch is pushed for independent review and is not merged; it does
+not start Stage 8 and touches no Stage 3–7 artifact. At the time of writing a separate
+session was running a CPU-only Stage 8 `fit` from `/home/ubuntu/preanchor-stage8`
+(`codex/stage8`, `0d07354`); that worktree, branch and run were left alone.
+
