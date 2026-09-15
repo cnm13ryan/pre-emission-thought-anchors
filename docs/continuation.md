@@ -377,3 +377,37 @@ tree) before the control plane existed; its outputs keep that identity and are n
 recomputed. Every new Stage 8/9 session registers with `preanchor agent register` and
 takes `gpu:h100` / `service:vllm` / `portable-store:writer` only when it actually uses the
 GPU, vLLM or the store; CPU-only fits need no lease.
+
+## Stage 10 closure (2026-09-15, branch `agent/stage10/controls-20260915-0ede0550`)
+
+SPEC Stage 10 is complete: `docs/stage10_validation.md`. Implementation
+`src/preanchor/probes/stage10.py`, `src/preanchor/viz/stage10.py`; commands
+`run-sensitivities` and `validate-sensitivities`. Canonical run
+`20260915T211903Z-b230473011-815ca2b7` (commit `c1e303c`, clean, CPU only, 969 s) on the
+frozen Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d` (freeze `e68f1d82…`), which is
+byte-identical before and after. Outputs `metrics/sensitivities.parquet` (`f4b6e488…`),
+`metrics/permutations.parquet` (`1adf0eb4…`), `predictions/lead_time.parquet`
+(`4e605530…`), four figures as html + json. Launch pattern:
+
+```bash
+tmux new-session -d -s stage10 'cd ~/preanchor-stage10 && set -a && . .env && set +a && \
+  CUDA_VISIBLE_DEVICES="" uv run --frozen preanchor run-sensitivities --config configs/mvp.yaml \
+  --stage9-run-id 20260915T201107Z-484989d2fe-19f1ab0d --workers 8 > ~/preanchor-logs/stage10_run.log 2>&1'
+uv run --frozen preanchor validate-sensitivities --config configs/mvp.yaml --run-id <S10>
+```
+
+Resume: `run-sensitivities --config configs/mvp.yaml --resume --run-id <S10>`. Stage 11
+(report, Streamlit, reproducibility handoff) is **not started**; it reads the Stage 9 and
+Stage 10 runs above, needs the Stage 8/9/10 MacBook `pull_verification` receipts, and must
+not reopen any selection. The portable backup covers Stage 10 (`discover_stage10`,
+`verify_stage10`, `tests/integration/test_backup_stage10.py`); `backup plan --for-stage 10`
+on the canonical root shows all stages complete, 217 new objects (18.5 MB incremental) and
+no blockers. The user runs, from the MacBook:
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage10 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 10
+```
+
+Only `BACKUP VERIFIED` plus a `pull_verification` receipt for that bundle satisfies the
+Stage 10 backup gate; none is claimed here.
+The worker branch is pushed; integration into `codex/stage8`/`codex/mvp` is the integrator's.

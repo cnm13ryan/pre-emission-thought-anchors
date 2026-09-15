@@ -42,5 +42,7 @@ engineering test, never a confirmatory test.
 ## Status
 
 Stage 8 implemented (`codex/stage8`); validated on synthetic runs and a two-site real-data
-smoke. Stage 9 commands are not implemented. No validation or test metric has been
-computed or inspected.
+smoke. Stage 9 ran once (`20260915T201107Z-484989d2fe-19f1ab0d`, freeze `e68f1d82…`). Stage 10
+(`preanchor run-sensitivities`) reads that run read-only: alternate thresholds come from
+training quantiles, refits use the frozen site and hyperparameter, and nothing is selected
+on validation or test (`docs/stage10_validation.md`).

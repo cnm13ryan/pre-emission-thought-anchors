@@ -566,3 +566,57 @@ Stage 3/4 (working tree after `060f6c0`):
 - **interpretation:** the remaining limits (per-root authority, `PREANCHOR_CMD` override,
   one-time gate check, receipt-before-rename) are documented in `docs/concurrency.md`
   and do not allow two owners or an unaudited takeover.
+
+## Stage 10 controls, sensitivities and lead time (2026-09-15, branch `agent/stage10/controls-20260915-0ede0550`, commit `c1e303c`)
+
+- **fact:** Stage 10 ran from the finalized Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d`
+  (freeze `e68f1d82…`, one receipted test evaluation) as its own run
+  `20260915T211903Z-b230473011-815ca2b7`; every Stage 9, Stage 8 and input hash was
+  identical before and after (`docs/stage10_validation.md`). The frozen selection (site 44,
+  C 0.1, q90 = 1.3549810893213545, validation-only Platt) was read, never changed.
+- **choice (base):** the worker branch starts at the Stage 9 head `9e71b1f` and merges the
+  reviewed control plane `a0ebdc3` (`a8ac6ac`; the only conflicts were the order of appended
+  documentation sections). Rejected: basing on the integration branch alone (no Stage 9 code)
+  or on Stage 9 alone (no session/lease registry).
+- **choice (refits):** a sensitivity that changes the training labels or rows (q80/q95, K=4,
+  supported rows, lead one, permutations) refits the family at its Stage 8-frozen site and
+  hyperparameter (`payload["models"]`), with no grid and no layer search; sensitivities that
+  only restrict evaluation rows (subgroups, quintiles) re-score the frozen Stage 9
+  predictions. Both sources are tagged in `metrics/sensitivities.parquet`. Rejected: rerunning
+  Stage 8 selection per sensitivity (a new selection is exactly what Stage 10 must not do).
+- **choice (thresholds):** q80/q90/q95 are `labels/threshold.py::train_threshold` (numpy
+  linear interpolation) over eligible training importance only; the run refuses if the
+  recomputed q90 differs from the freeze. Values: 0.8166508259882914, 1.3549810893213545,
+  1.827347118920559 (identical to Stage 4's `labels_summary.json`).
+- **choice (K=4):** the K=4 sensitivity changes eligibility only (`eligible_k4`) and keeps
+  the frozen q90 threshold, isolating the convergence rule. Rejected: recomputing a quantile
+  on the K=4 set, which would confound two changes.
+- **choice (position quintile):** train-derived cut points on `sentence_idx` (25, 53, 86,
+  129), the allowed §3.9 position quantity, used both as the diagnostic stratifier and as the
+  permutation stratum. Rejected: within-trajectory rank, which needs the completed
+  trajectory length (an excluded quantity).
+- **choice (entropy quintile):** train-derived cut points on `next_token_entropy`.
+- **choice (lead one):** for target S_i the features (site-44 state *and* the twelve
+  observables) come from the stored row of S_(i-1), whose boundary is
+  `target_token_start(S_(i-1)) - 1`; targets with `sentence_idx == 0` are stored as
+  unavailable. The lead-zero comparator is the frozen model restricted to the same rows.
+  Rejected: shifting first sentences to any other boundary; reusing lead-zero observables at
+  lead one (they would leak S_(i-1)'s tokens).
+- **choice (permutations):** 100 permutations of *training* labels within
+  `(problem_id, trace_kind, position_quintile)`, seeds `derived_seed(seed_root,
+  "permutation", k)`, single-class strata left fixed (45 of 95), refit at the frozen site
+  and C, scored against the fixed validation/test labels; the observed statistic is the
+  frozen model's. Rejected: permuting evaluation labels (a different null) or forcing balance
+  across strata.
+- **fact:** `position_quintile 5 / test` has 53 rows and no anchor: reported as undefined,
+  not pooled. Every row has `sample_count = 100`, so the two replacement-support clauses
+  coincide.
+- **fact (tests):** the Stage 9 branch's `test_backup_stage9.py` predates the control plane
+  and needed the writer lease; `test_backup_store.py` asserted that Stage 9 is unknown to
+  `stage_closure` although `9e71b1f` had added it. Both tests were updated to the merged
+  behaviour, neither was weakened.
+- **interpretation:** see `docs/stage10_validation.md`. The primary gain over the combined
+  observables (+0.037 test AUCPR, interval crossing zero) keeps its sign at q80, under K=4
+  and on supported rows, vanishes at q95 and at lead one on test, and lies inside the
+  stratified permutation null (84th percentile on test, 91st on validation). Nothing here
+  reopens Stage 8/9 selection.
