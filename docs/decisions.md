@@ -284,3 +284,26 @@ Stage 3/4 (working tree after `060f6c0`):
   one. Rejected alternative: SPEC §7.5's fixed "at most four in flight on H100", which is
   an execution-only default, not a scientific setting; no sampling, prompt, seed, model,
   dtype or context parameter changed.
+- **choice (portable backup, 2026-09-15):** canonical state is protected as exact bytes in
+  a content-addressed store (`artifacts/portable/objects/sha256/...`) with immutable,
+  self-hashed bundle manifests and append-only receipts; the MacBook mirrors it under
+  `~/preanchor-backups/portable/` and counts a bundle as protected only after its own
+  rehash writes a `pull_verification` receipt. Scientific identity (config hashes,
+  revisions, Stage 3/4 hashes, run IDs, plan and sorted rollout-ID-set hash, frozen
+  generation settings) is recorded separately from physical origin (root, mount, host,
+  GPU, region), which `restore verify` prints but never compares. Rejected alternatives:
+  whole-run rsync snapshots (no deduplication, no per-object verification), regenerating
+  Stage 3/4 on the new filesystem (byte-different `trajectories.parquet` and MiniLM
+  fingerprints changed every rollout ID in the 2026-09-15 reconstruction), and requiring
+  the old filesystem UUID.
+- **choice (path portability, 2026-09-15):** Stage 2/4 `local_path` validation accepts a
+  recorded absolute path that names the same `<run_id>/<run-relative path>`
+  (`io.same_logical_path`); unit key, run ID and upstream content hashes stay strict, and
+  exactly equal legacy paths still validate. Existing Stage 3 tables are not rewritten:
+  the embedded absolute `source_path` is historical provenance because its bytes are part
+  of every Stage 5 rollout ID. Recommendation for the next deliberate schema/identity
+  boundary (a new Stage 3 import that is allowed to change hashes): drop `source_path`
+  from `trajectories.parquet` in favour of the Stage 2 unit key and upstream hash, and
+  record `local_path` as run-relative, so no physical location participates in
+  scientific identity. Rejected alternative: silently migrating the current canonical
+  tables, which would invalidate the finalized production run.
