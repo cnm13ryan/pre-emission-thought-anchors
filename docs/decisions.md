@@ -271,3 +271,16 @@ Stage 3/4 (working tree after `060f6c0`):
   `20260915T113457Z` and `20260915T113541Z` (root-owned hub cache), `20260915T120105Z`
   (MiniLM download into the same cache). Transit downloads now use the user-owned
   `cache/huggingface/datasets-hub` (also via `HF_HUB_CACHE` for the audit/build).
+- **choice (Stage 5, H100 session 2026-09-15):** the Stage 5 runner no longer caps
+  in-flight requests at three. `batching.MAX_CONCURRENCY = 16` is a profile ceiling; the
+  admitted concurrency is still derived from the measured GPU KV capacity with the 15%
+  worst-case-context margin (`required_capacity`). `start_vllm.sh` reads only
+  `gpu_memory_utilization` from the selected `configs/lambda/*.yaml` profile (H100 PCIe
+  0.90, A6000 0.92) and keeps `max_model_len` 20480; the profile's 32768 is never used for
+  Stage 5. Admission accepts the measured cards in `a6000.HARDWARE` (RTX A6000, H100 PCIe)
+  and records their vendor bandwidth/BF16 figures for roofline context only. Selection
+  generalizes the B2/B3 rule to an ascending chain: a larger safe concurrency is chosen
+  only when it improves aggregate throughput by at least 10% over the next-smaller safe
+  one. Rejected alternative: SPEC §7.5's fixed "at most four in flight on H100", which is
+  an execution-only default, not a scientific setting; no sampling, prompt, seed, model,
+  dtype or context parameter changed.
