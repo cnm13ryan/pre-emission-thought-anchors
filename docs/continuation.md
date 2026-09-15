@@ -346,3 +346,15 @@ not start Stage 8 and touches no Stage 3–7 artifact. At the time of writing a 
 session was running a CPU-only Stage 8 `fit` from `/home/ubuntu/preanchor-stage8`
 (`codex/stage8`, `0d07354`); that worktree, branch and run were left alone.
 
+
+## Control plane v0.1 review and integration (2026-09-15)
+
+Independent review on `agent/ops/control-plane-review-20260915-e1d2bc32` (from `dde76ce`)
+fixed one normal-path GPU bypass (MiniLM scorers on `--device cuda`), the `__` name
+aliasing and the MacBook restore-push gap; see `docs/concurrency.md` ("Independent review
+record") and `docs/decisions.md`. Stage 8 had already completed on `codex/stage8`
+(`358945f`; canonical run `20260915T193326Z-57bcb41c84-7ebd0db6` at `0d07354`, clean
+tree) before the control plane existed; its outputs keep that identity and are not
+recomputed. Every new Stage 8/9 session registers with `preanchor agent register` and
+takes `gpu:h100` / `service:vllm` / `portable-store:writer` only when it actually uses the
+GPU, vLLM or the store; CPU-only fits need no lease.

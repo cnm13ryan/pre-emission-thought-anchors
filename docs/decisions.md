@@ -504,3 +504,24 @@ Stage 3/4 (working tree after `060f6c0`):
   store now hold the writer lease through `backup_fixtures.grant_writer_lease`; no
   scientific test was weakened.
 
+
+## Control plane v0.1 independent review (2026-09-15, branch `agent/ops/control-plane-review-20260915-e1d2bc32`)
+
+- **fact:** review of `dde76ce` from a fresh worktree reproduced the CPU suites (286 passed /
+  1 skipped; scientific 5 passed / 1 skipped) and found one normal-path GPU bypass: the
+  documented `audit-upstream` / `build-labels --device cuda` commands load MiniLM through
+  `labels.similarity.ReplacementSimilarity` / `labels.generate.MiniLMSimilarityScorer`
+  with no lease.
+- **choice:** gate those two constructors on a non-CPU device with `require(["gpu:h100"])`
+  before `sentence_transformers` is imported. Rejected: gating `preanchor doctor`'s 8x8
+  admission kernel (telemetry) and gating the CPU default.
+- **choice:** resource names may not contain `__` (the on-disk escape of `:`), so
+  `gpu__h100` can no longer alias `gpu:h100`'s directory. Rejected: a different escape
+  character (would change the validated on-disk layout).
+- **choice:** the MacBook `restore` holds `portable-store:writer` around its rsync push
+  through a short-lived `backup-restore` session and releases it on every exit path;
+  read-only remote steps and the root-side `restore apply` stay unleased. Rejected: moving
+  the push behind a new CLI command (a redesign of the transfer path).
+- **interpretation:** the remaining limits (per-root authority, `PREANCHOR_CMD` override,
+  one-time gate check, receipt-before-rename) are documented in `docs/concurrency.md`
+  and do not allow two owners or an unaudited takeover.

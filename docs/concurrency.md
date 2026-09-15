@@ -53,8 +53,9 @@ $PREANCHOR_ROOT/control/
 ```
 
 `<safe-resource>` replaces `:` with `__` (`gpu:h100` -> `gpu__h100`). Resource and session
-names must match `[A-Za-z0-9][A-Za-z0-9._-]*` segments joined by at most three `:`;
-anything else, `..`, `/`, or a symlink anywhere under `control/` fails closed.
+names must match `[A-Za-z0-9][A-Za-z0-9._-]*` segments joined by at most three `:` and may
+not contain `__` (so no second name can alias a lease directory); anything else, `..`,
+`/`, or a symlink anywhere under `control/` fails closed.
 
 ## Sessions
 
@@ -89,7 +90,7 @@ Resources are free-form names; v0.1 uses:
 
 | Resource | Protects | Enforced by |
 | --- | --- | --- |
-| `gpu:h100` | the single GPU | `model.load.load_model` (every production model load: extraction, the scientific invariance test) and `features.observables.load_head` on a non-CPU device, checked before `torch` is imported |
+| `gpu:h100` | the single GPU | `model.load.load_model` (every production model load: extraction, the scientific invariance test), `features.observables.load_head` on a non-CPU device, and the MiniLM scorers `labels.similarity.ReplacementSimilarity` / `labels.generate.MiniLMSimilarityScorer` on a non-CPU device (`audit-upstream` / `build-labels --device cuda`); all checked before `torch`/`sentence_transformers` is imported |
 | `service:vllm` | the `preanchor-vllm` container | `scripts/start_vllm.sh`, together with `gpu:h100`, before any Docker call; `stop_vllm.sh` needs no lease |
 | `portable-store:writer` | `artifacts/portable/{objects,manifests,latest.json}` | `backup.prepare.prepare` and `backup.legacy.import_legacy` before the first store write |
 | `canonical-publish:stage<N>` | publishing to `data/processed/stage<N>` | v0.2 (primitive only) |
@@ -151,9 +152,30 @@ session, all with receipts. A concurrent writer fails fast (exit 3, owner shown)
 any object, manifest or `latest.json` write. A caller that already holds the lease exports
 its token and no session is created. `BACKUP VERIFIED` is still printed only after the
 MacBook rehashed every object. Read-only commands (`backup plan|list|verify|store-path`,
-`restore plan`) need no lease. The MacBook-initiated `restore` pushes objects with
-`rsync --ignore-existing` (content-addressed, never clobbering) outside the CLI; leasing
-that path is deferred.
+`restore plan`) need no lease. The MacBook-initiated `restore` pushes objects and the
+bundle manifest with `rsync --ignore-existing` (content-addressed, never clobbering,
+`latest.json` untouched) outside the CLI; since the review of 2026-09-15 the wrapper
+registers a short-lived `backup-restore` session on Lambda, holds `portable-store:writer`
+from before the first push until the remote object verification, and releases it on
+every exit path (an `EXIT` trap). A held store refuses the restore before anything is
+pushed. The owner token travels once in the remote command line of `lease release`.
+
+## Known limits (v0.1)
+
+- The lease authority is the `control/` directory of one persistent root. A command run
+  with `PREANCHOR_ROOT` pointing elsewhere (a scratch restore root) consults that root's
+  leases, not the canonical ones; production GPU/vLLM/store work runs against the
+  canonical root only.
+- `scripts/start_vllm.sh` calls the gate through `PREANCHOR_CMD` (overridable for tests);
+  a shell that runs `docker run` by hand bypasses every gate, as it always could. The
+  gates protect the repository's own commands, not the host.
+- A gate is checked once, when the command starts; ownership is not re-verified while a
+  long job runs. Reclaiming a lease never stops the holder's process.
+- `release`/`reclaim` write their receipt before the `rename`; if the rename then fails
+  (the directory was archived concurrently) the receipt over-reports and the CLI shows the
+  `OSError`. Ownership itself is still single: only one `rename` can succeed.
+- `preanchor doctor` runs an 8x8 BF16 kernel on the GPU as an admission check; it is
+  telemetry, not a shared-resource use, and is not gated.
 
 ## Deliberately deferred
 
@@ -187,3 +209,22 @@ receipts under `$PREANCHOR_ROOT/control/receipts/`. No real resource (`gpu:h100`
 reclaimed. Canonical Stage 3/4/7 tables and `artifacts/portable/latest.json` hashed
 identically before and after; the only files that changed under `artifacts/runs` belong
 to the other session's live Stage 8 `fit` run, which this work did not touch.
+
+## Independent review record (2026-09-15, branch `agent/ops/control-plane-review-20260915-e1d2bc32`)
+
+Reviewed head `dde76ce` independently (criteria derived from `AGENTS.md`/`SPEC` before
+reading the implementer's report; `tests/unit tests/integration` 286 passed / 1 skipped
+and `tests/scientific` 5 passed / 1 skipped re-run from a fresh worktree). Findings and
+disposition:
+
+- **Fixed (bypass):** `audit-upstream` / `build-labels --device cuda` loaded MiniLM onto
+  the GPU through `ReplacementSimilarity` / `MiniLMSimilarityScorer` without a lease; both
+  now require `gpu:h100` on a non-CPU device
+  (`tests/integration/test_control_enforcement.py::test_minilm_scorers_reject_a_gpu_device_without_the_lease`).
+- **Fixed (aliasing):** `gpu__h100` mapped to the same directory as `gpu:h100`; names
+  containing `__` are now malformed.
+- **Fixed (restore gap):** the MacBook `restore` push now holds `portable-store:writer`
+  (`tests/integration/test_portable_script.py`, two tests).
+- **Non-blocking, documented:** the limits listed above. No scientific identity reads
+  control state (`manifest.identity`, `ids.cache_key`, `prepare.scientific_identity`
+  inspected); no pre-existing test was weakened (`git diff f6ce263..dde76ce -- tests`).
