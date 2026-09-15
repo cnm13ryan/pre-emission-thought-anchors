@@ -41,10 +41,11 @@ def world(tmp_path_factory):
 
 
 @pytest.fixture
-def provenance(monkeypatch):
-    from backup_fixtures import fake_provenance
+def provenance(world, monkeypatch):
+    from backup_fixtures import fake_provenance, grant_writer_lease
 
     fake_provenance(monkeypatch)
+    grant_writer_lease(world[0], monkeypatch)
 
 
 def test_stage7_closure_and_plan_classification(world, provenance):

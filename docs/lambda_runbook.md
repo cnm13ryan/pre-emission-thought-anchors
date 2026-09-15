@@ -71,6 +71,10 @@ HF_HUB_CACHE=$PREANCHOR_ROOT/cache/huggingface/datasets-hub \
   uv run --frozen preanchor build-labels --run-id AUDIT_RUN --raw-run-id RAW --device cuda
 ```
 
+`--device cuda` puts MiniLM on the shared GPU and therefore needs the `gpu:h100` lease
+token in `PREANCHOR_LEASE_TOKENS` (see the shared-resource section below); `--device cpu`
+needs nothing.
+
 Stage 5 production now requires `PREANCHOR_HOURLY_RATE` in `.env`, a completed
 benchmark run, and `python -m preanchor.labels.pilot --prepare --benchmark-run-id BENCH`.
 
@@ -95,3 +99,27 @@ Non-interactive SSH may not find `uv` in `~/.local/bin`; pass
 migrations restore from the MacBook copy; they never depend on mounting the old
 filesystem. Current state: the finalized H100 Stage 5 lineage is verified on the MacBook
 (bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2`, see `docs/continuation.md`).
+
+## Shared-resource ownership (2026-09-15, control plane v0.1)
+
+Worktrees isolate source only. Before any GPU or vLLM work, and for every portable-store
+write, the acting session must hold the corresponding lease; see `docs/concurrency.md`
+for the session/lease CLI, the one-session/one-branch/one-worktree rule and the
+`codex/stage8` integration-branch policy. Short form:
+
+```bash
+uv run --frozen preanchor agent register --task "..." --role implementation --worktree "$PWD"
+uv run --frozen preanchor agent status                       # who owns what, stale or not
+eval "$(uv run --frozen preanchor lease acquire gpu:h100 --session <id> --purpose "..." --env)"
+eval "$(uv run --frozen preanchor lease acquire service:vllm --session <id> --purpose "..." --env)"
+scripts/start_vllm.sh configs/lambda/h100_pcie_80.yaml      # refuses without both leases
+uv run --frozen preanchor lease release service:vllm; uv run --frozen preanchor lease release gpu:h100
+```
+
+`preanchor extract-activations` (any model load) and the MiniLM scorers on a non-CPU
+device refuse without `gpu:h100`; `backup prepare` takes `portable-store:writer` by
+itself, and the MacBook wrapper's `restore` takes it around its push, so the MacBook
+commands are unchanged. A
+stale lease is a diagnosis trigger: never take it over, use `preanchor lease reclaim`
+with a reason and read the receipt.
+

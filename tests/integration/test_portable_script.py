@@ -34,7 +34,8 @@ def write_fakes(binaries: Path, log: Path) -> None:
         "# 'uv run --frozen preanchor <args>' -> the CLI against the fake remote root\n"
         "args = sys.argv[4:]\n"
         "args += ['--root', os.environ['FAKE_REMOTE_ROOT'], '--repo', os.environ['FAKE_REPO']]\n"
-        "if args[0] in ('backup', 'restore') and args[1] in ('list', 'verify', 'store-path') "
+        "if args[0] in ('agent', 'lease') "
+        "or args[0] in ('backup', 'restore') and args[1] in ('list', 'verify', 'store-path') "
         "or args[0] == 'restore' and args[1] == 'plan':\n"
         "    args = [a for i, a in enumerate(args) if not (a == '--repo' or "
         "(i > 0 and args[i-1] == '--repo'))]\n"
@@ -182,6 +183,56 @@ def test_restore_pushes_bundle_and_verifies_on_a_new_root(harness):
                 for p in (new_root / "artifacts/portable/receipts").glob("*.json")]
     assert {r["kind"] for r in receipts} == {"restore", "restore_verification"}
     assert all(r["destination"] == str(new_root) for r in receipts)
+    # The push held portable-store:writer on the destination: acquired before the first
+    # rsync towards it, released after the remote verification, session closed, lease free.
+    from preanchor.control import control_root, leases, sessions
+    from preanchor.control.receipts import list_receipts
+
+    lines = harness["log"].read_text().splitlines()   # dry run, then the real restore
+    store = str(new_root / "artifacts/portable")
+    acquire = max(i for i, line in enumerate(lines)
+                  if "lease acquire portable-store:writer" in line)
+    release = max(i for i, line in enumerate(lines)
+                  if "lease release portable-store:writer" in line)
+    pushes = [i for i, line in enumerate(lines) if i > acquire and line.startswith("rsync ")
+              and (line.rstrip("/").endswith(store) or f"{store}/manifests" in line)]
+    assert len(pushes) == 2 and max(pushes) < release
+    control = control_root(new_root)
+    assert leases.describe(control, "portable-store:writer")["state"] == "free"
+    kinds = [r["kind"] for r in list_receipts(control, subject="portable-store:writer")]
+    assert kinds == ["lease_acquired", "lease_released"] * 2      # dry run + real restore
+    pushers = [s for s in sessions.status(control, include_closed=True)
+               if s["role"] == "backup-restore"]
+    assert len(pushers) == 2 and all(s["status"] == "closed" for s in pushers)
+
+
+def test_restore_refuses_to_push_while_another_writer_holds_the_store(harness):
+    from preanchor.control import control_root, leases, sessions
+
+    env = harness["env"]
+    assert run_script(env, "backup", "lambda-alias", "--for-stage", "5").returncode == 0
+    new_root = harness["tmp"] / "new-region/mount-1234/preanchor"
+    new_root.mkdir(parents=True)
+    control = control_root(new_root)
+    holder = sessions.register(control, task="concurrent backup", role="tests", worktree=None)
+    held = leases.acquire(control, "portable-store:writer", session_id=holder["session_id"],
+                          purpose="p")
+    env = {**env, "FAKE_REMOTE_ROOT": str(new_root)}
+    result = run_script(env, "restore", "lambda-alias", "--for-stage", "5")
+    assert result.returncode != 0 and "held by another writer" in result.stderr
+    assert "RESTORE VERIFIED" not in result.stdout
+    assert not (new_root / "artifacts/portable/objects").exists()
+    assert not (new_root / "artifacts/portable/manifests").exists()
+    assert not (new_root / "data").exists()
+    # The holder keeps its lease; the wrapper's own session is closed again.
+    owner = leases.describe(control, "portable-store:writer")["owner"]
+    assert owner["session_id"] == holder["session_id"]
+    pushers = [s for s in sessions.status(control, include_closed=True)
+               if s["role"] == "backup-restore"]
+    assert len(pushers) == 1 and pushers[0]["status"] == "closed"
+    leases.release(control, "portable-store:writer", held["owner_token"])
+    result = run_script(env, "restore", "lambda-alias", "--for-stage", "5")
+    assert result.returncode == 0 and "RESTORE VERIFIED" in result.stdout
 
 
 def test_script_rejects_unsafe_hosts(harness):

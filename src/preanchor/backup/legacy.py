@@ -7,9 +7,15 @@ from pathlib import Path
 
 from preanchor.backup.bundle import SCHEMA_VERSION, manifest_digest, write_bundle
 from preanchor.backup.classify import HISTORICAL_EVIDENCE, SECRET, secret_reason
-from preanchor.backup.prepare import physical_origin, portable_root, producer_identity
+from preanchor.backup.prepare import (
+    WRITER_LEASE,
+    physical_origin,
+    portable_root,
+    producer_identity,
+)
 from preanchor.backup.receipts import write_receipt
 from preanchor.backup.store import ObjectStore
+from preanchor.control.leases import require
 from preanchor.ids import file_hash
 from preanchor.manifest import utc_now
 
@@ -32,7 +38,8 @@ def verify_legacy_snapshot(snapshot: Path) -> dict[str, str]:
     return entries
 
 
-def import_legacy(root: Path, repo: Path, snapshot: Path) -> dict:
+def import_legacy(root: Path, repo: Path, snapshot: Path, *,
+                  lease_tokens: dict[str, str] | None = None) -> dict:
     root, snapshot = Path(root), Path(snapshot).resolve()
     entries = verify_legacy_snapshot(snapshot)
     prefix = f"legacy/{snapshot.name}"
@@ -40,6 +47,7 @@ def import_legacy(root: Path, repo: Path, snapshot: Path) -> dict:
         reason = secret_reason(snapshot / name, f"{prefix}/{name}")
         if reason:
             raise ValueError(f"Refusing legacy entry {name}: {reason}")
+    require([WRITER_LEASE], root=root, tokens=lease_tokens)   # gate before any store write
     portable = portable_root(root)
     store = ObjectStore(portable)
     records, created, reused, seen = [], 0, 0, set()

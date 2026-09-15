@@ -511,3 +511,58 @@ Stage 3/4 (working tree after `060f6c0`):
 - **interpretation:** the pending selection (site 44, C 0.1; Ridge site 28, alpha 1e4) and
   all AUCPR values in `docs/stage8_validation.md` are training-fold diagnostics, not
   evidence about held-out performance.
+
+## Control plane v0.1 (2026-09-15, branch `agent/ops/control-plane-v1-20260915-0bd79efc`, base `f6ce263`)
+
+- **fact:** Git worktrees do not isolate the H100, the `preanchor-vllm` container,
+  `$PREANCHOR_ROOT`, the canonical publication paths or the portable store; separate
+  sessions were already running from separate worktrees (`codex/stage7`, `codex/stage8`)
+  against the same root.
+- **choice:** ownership is a persistent per-resource directory under
+  `$PREANCHOR_ROOT/control/leases/`, created with one `mkdir` (atomic on the virtiofs root)
+  and ended with one `rename` into `.archive/`; `owner.json` stores only the SHA-256 of a
+  random owner token, and only that token releases. Rejected: relying on the existing
+  process-scoped `fcntl.flock` (dies with the process, invisible across sessions), a lock
+  file with `O_EXCL` (a killed writer leaves an empty file that carries no owner
+  information), or any daemon/database.
+- **choice:** stale heartbeats never transfer ownership; `reclaim` needs a reason and
+  either positive evidence (owner session closed, or an incomplete acquisition older than
+  the stale window) or `--force` on a stale lease; a live owner process on this host
+  always blocks. Rejected: inferring death from heartbeat age or from `nvidia-smi`.
+- **choice:** gates sit at the real mutation points, before the expensive import or the
+  first store write: `model.load.load_model`, `features.observables.load_head` (non-CPU),
+  `scripts/start_vllm.sh` (after argument validation, before Docker), `backup.prepare.prepare`
+  and `backup.legacy.import_legacy` (after the read-only plan and its blockers). The CLI
+  auto-leases the writer for `backup prepare`/`import-legacy` through a short-lived
+  `backup-writer` session so `scripts/preanchor_portable.sh` is unchanged. Rejected: an
+  advisory-only design, and requiring manual lease commands for every routine backup.
+- **interpretation:** the GPU-only scientific invariance test loads the model and is
+  therefore gated too; a session that runs it holds `gpu:h100` exactly as extraction does.
+- **choice:** `control/` is operational metadata: outside run manifests, config/unit
+  hashes, run IDs and `scientific_identity_hash`, and outside portable bundles (the
+  classifier does not scan it). Including receipts as operational provenance is deferred
+  to v0.2 rather than changing bundle contents silently. Tests that mutate a synthetic
+  store now hold the writer lease through `backup_fixtures.grant_writer_lease`; no
+  scientific test was weakened.
+
+
+## Control plane v0.1 independent review (2026-09-15, branch `agent/ops/control-plane-review-20260915-e1d2bc32`)
+
+- **fact:** review of `dde76ce` from a fresh worktree reproduced the CPU suites (286 passed /
+  1 skipped; scientific 5 passed / 1 skipped) and found one normal-path GPU bypass: the
+  documented `audit-upstream` / `build-labels --device cuda` commands load MiniLM through
+  `labels.similarity.ReplacementSimilarity` / `labels.generate.MiniLMSimilarityScorer`
+  with no lease.
+- **choice:** gate those two constructors on a non-CPU device with `require(["gpu:h100"])`
+  before `sentence_transformers` is imported. Rejected: gating `preanchor doctor`'s 8x8
+  admission kernel (telemetry) and gating the CPU default.
+- **choice:** resource names may not contain `__` (the on-disk escape of `:`), so
+  `gpu__h100` can no longer alias `gpu:h100`'s directory. Rejected: a different escape
+  character (would change the validated on-disk layout).
+- **choice:** the MacBook `restore` holds `portable-store:writer` around its rsync push
+  through a short-lived `backup-restore` session and releases it on every exit path;
+  read-only remote steps and the root-side `restore apply` stay unleased. Rejected: moving
+  the push behind a new CLI command (a redesign of the transfer path).
+- **interpretation:** the remaining limits (per-root authority, `PREANCHOR_CMD` override,
+  one-time gate check, receipt-before-rename) are documented in `docs/concurrency.md`
+  and do not allow two owners or an unaudited takeover.

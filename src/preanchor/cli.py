@@ -8,6 +8,7 @@ import typer
 
 from preanchor.backup.cli import backup_app, restore_app
 from preanchor.config import Settings, load_config
+from preanchor.control.cli import agent_app, lease_app
 from preanchor.doctor import run_doctor
 from preanchor.logging import configure_logging, redact
 from preanchor.manifest import create_run, load_manifest
@@ -18,6 +19,8 @@ from preanchor.storage import persistent_mount
 app = typer.Typer(no_args_is_help=True, help="Passive offline thought-anchor experiment.")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
+app.add_typer(agent_app, name="agent")
+app.add_typer(lease_app, name="lease")
 
 
 @app.callback()
