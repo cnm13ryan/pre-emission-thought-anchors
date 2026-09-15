@@ -96,8 +96,8 @@ def verify_runs(root: Path, manifest: dict, for_stage: int, report: Report) -> d
     stages = {f"stage{s}" for s in stage_closure(for_stage)}
     loaded: dict[str, dict] = {}
     for run_id, info in sorted(manifest["bundle"]["runs"].items()):
-        if info["role"] == "historical" or info["stage"] not in stages | {"stage5", "stage6",
-                                                                          "stage7"}:
+        if info["role"] == "historical" or info["stage"] not in stages | {
+                "stage5", "stage6", "stage7", "stage8", "stage9"}:
             continue
         directory = root / "artifacts/runs" / run_id
         if not directory.is_dir():
@@ -475,6 +475,90 @@ def verify_stage7(root: Path, manifest: dict, runs: dict, stage3: dict | None,
     return outcome
 
 
+def verify_stage8(root: Path, manifest: dict, runs: dict, report: Report) -> dict:
+    """The canonical Stage 8 run re-validates on restored bytes (records, hashes, units) and
+    the Stage 9 handoff loader accepts it against the restored Stage 7 inputs."""
+    from preanchor.backup.classify import stage8_run_summary
+    from preanchor.config import ExperimentConfig
+    from preanchor.probes.stage9 import load_probe_run
+
+    recorded = manifest["scientific_identity"].get("stage8") or {}
+    run_id = recorded.get("run_id")
+    outcome = {"run_id": run_id, "verified": False}
+    if not recorded or not run_id or runs.get(run_id) is None:
+        report.add("stage8_selection", "Stage 8 identity recorded and run loaded", False)
+        return outcome
+    run = root / "artifacts/runs" / run_id
+    summary = report.guard("stage8_selection", f"{run_id} Stage 8 records validate (summary, "
+                           "selection outputs, pending record, validate-probes)",
+                           lambda r=run: stage8_run_summary(r))
+    if not isinstance(summary, dict):
+        return outcome
+    report.add("stage8_selection", f"{run_id} selection outputs, threshold, layer and "
+               "regularisation == bundle identity",
+               summary["output_hashes"] == recorded.get("output_hashes")
+               and summary["binary"] == recorded.get("binary")
+               and summary["continuous"] == recorded.get("continuous")
+               and summary["anchor_threshold"] == recorded.get("anchor_threshold")
+               and summary["unit_keys"] == recorded.get("unit_keys"))
+    config = report.guard("config_identity", f"{run_id} resolved config validates and parses "
+                          "under current code",
+                          lambda p=run / "resolved_config.yaml": (
+                              validate_artifact(p),
+                              ExperimentConfig.model_validate(read_yaml(p)))[1])
+    if not isinstance(config, ExperimentConfig):
+        return outcome
+    handoff = report.guard("stage8_selection", f"{run_id} Stage 9 handoff loader accepts the "
+                           "restored run against the restored Stage 7 inputs",
+                           lambda r=run, c=config: load_probe_run(root, c, r))
+    if isinstance(handoff, dict):
+        outcome.update(verified=True, units=summary["n_units"])
+    return outcome
+
+
+def verify_stage9(root: Path, repo: Path, manifest: dict, runs: dict, report: Report) -> dict:
+    """The canonical Stage 9 run re-validates read-only: freeze integrity against every
+    restored artifact, validation/test membership and the exactly-once receipt."""
+    from preanchor.backup.classify import stage9_run_summary
+    from preanchor.config import ExperimentConfig
+    from preanchor.probes.stage9 import validate_stage9
+
+    recorded = manifest["scientific_identity"].get("stage9") or {}
+    run_id = recorded.get("run_id")
+    outcome = {"run_id": run_id, "verified": False}
+    if not recorded or not run_id or runs.get(run_id) is None:
+        report.add("stage9_freeze", "Stage 9 identity recorded and run loaded", False)
+        return outcome
+    run = root / "artifacts/runs" / run_id
+    summary = report.guard("stage9_freeze", f"{run_id} Stage 9 records validate (freeze, "
+                           "registry, calibrator, validation outputs, test receipt)",
+                           lambda r=run: stage9_run_summary(r))
+    if not isinstance(summary, dict):
+        return outcome
+    report.add("stage9_freeze", f"{run_id} freeze hash, outputs and test state == bundle "
+               "identity", summary["freeze_sha256"] == recorded.get("freeze_sha256")
+               and summary["output_hashes"] == recorded.get("output_hashes")
+               and summary["test_evaluated"] == recorded.get("test_evaluated")
+               and summary["test_receipt"] == recorded.get("test_receipt"))
+    config = report.guard("config_identity", f"{run_id} resolved config validates and parses "
+                          "under current code",
+                          lambda p=run / "resolved_config.yaml": (
+                              validate_artifact(p),
+                              ExperimentConfig.model_validate(read_yaml(p)))[1])
+    if not isinstance(config, ExperimentConfig):
+        return outcome
+    validated = report.guard("stage9_freeze", f"{run_id} validate-evaluation on the restored "
+                             "run (read-only)",
+                             lambda r=run, c=config: validate_stage9(r, repo, c,
+                                                                     write_record=False))
+    if isinstance(validated, dict):
+        report.add("stage9_freeze", f"{run_id} validate-evaluation ok", bool(validated["ok"]),
+                   "; ".join(validated.get("problems") or []))
+        outcome.update(verified=bool(validated["ok"]),
+                       test_evaluated=summary["test_evaluated"])
+    return outcome
+
+
 def verify_source(repo: Path, manifest: dict, runs: dict, for_stage: int,
                   report: Report) -> bool:
     """Is the *current* checkout the one that can continue the producing run?"""
@@ -530,6 +614,12 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
     stage7_outcome = {}
     if 7 in closure:
         stage7_outcome = verify_stage7(root, manifest, runs, stage3, report)
+    stage8_outcome = {}
+    if 8 in closure:
+        stage8_outcome = verify_stage8(root, manifest, runs, report)
+    stage9_outcome = {}
+    if 9 in closure:
+        stage9_outcome = verify_stage9(root, repo, manifest, runs, report)
     ready = verify_source(repo, manifest, runs, for_stage, report)
     from preanchor.backup.prepare import physical_origin
 
@@ -552,6 +642,7 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
                   "same uv.lock (check_resume)" if not ready else "checkout matches"),
               "reacquire": manifest["reacquire"], "stage5": outcome,
               "stage6": stage6_outcome, "stage7": stage7_outcome,
+              "stage8": stage8_outcome, "stage9": stage9_outcome,
               "physical_origin": origin, "physical_destination": destination}
     receipt = write_receipt(portable, "restore_verification", {
         "bundle_id": name, "manifest_sha256": result["manifest_sha256"],

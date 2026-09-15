@@ -82,6 +82,12 @@ def render_plan(summary: dict) -> str:
         if stage == "stage7" and info.get("status") != "absent":
             extra = (f" run={info.get('run_id')} units={info.get('n_units')} "
                      f"rows={info.get('n_rows')}")
+        if stage == "stage8" and info.get("status") != "absent":
+            extra = (f" run={info.get('run_id')} units={info.get('n_units')} "
+                     f"layer={(info.get('binary') or {}).get('layer')}")
+        if stage == "stage9" and info.get("status") != "absent":
+            extra = (f" run={info.get('run_id')} freeze={(info.get('freeze_sha256') or '')[:12]} "
+                     f"test_evaluated={info.get('test_evaluated')}")
         lines.append(f"  {stage}: {info.get('status')}{extra}")
     lines.append("Classification:")
     for name, row in summary["classification"].items():
