@@ -26,3 +26,15 @@ Stage 4 closure (commit 5e92130): the Problem 4682 released-label audit produced
 ### Support-unit optimization closure
 
 Commit `6a9ae6e` is the active batched support implementation. The prior unreferenced per-sentence predecessor is retained under `scripts/archive/` for provenance. The CUDA path was compared with authoritative CPU/FP32 on 10,000 cosine comparisons: maximum absolute difference `2.980232238769531e-7`, median `1.1920928955078125e-7`, p99 `2.980232238769531e-7`, and zero `<0.8` classification or support-count disagreements. The pinned model/revision and threshold were unchanged. All 6,474 atomic support outputs validated; full invocation completed in 197.039 seconds. Compact raw-derived sensitivity inputs and train-only q80/q90/q95 plus K=4/K=5 masks are recorded in `data/processed/stage4/raw_sensitivity_inputs.parquet` and its provenance JSON.
+
+## Fresh pilot answer parsing correction (2026-09-15; commit introducing this entry)
+
+`labels/upstream_answers.py` ports `extract_boxed_answers` and `normalize_latex`
+from pinned `utils.py`; MIT copyright and license are retained in the module.
+Only typing/formatting changes: behavior, including first-box selection and
+unterminated-box extraction, matches upstream `generate_rollouts.py`.
+`labels/fresh.py` implements the frozen union-support canonical KL independently.
+Legacy contrast excludes missing answers and smooths over the observed union.
+Old `importance.py` and historical Stage 4 outputs remain intact; their support
+normalization defect needs a separate historical audit. The Stage 5 runner never
+uses the whole continuation as its answer category when constructing labels.

@@ -38,3 +38,16 @@ resumable under a new commit. The stage backup helper is
 `scripts/prepare_stage2_backup.py FULL_RUN_ID SMOKE_RUN_ID`; it retains both runs and
 minimal inspection evidence, excluding HF caches. See `docs/stage2_validation.md` for
 current identifiers. Await the MacBook verification receipt before Stage 3.
+
+## A6000 session (2026-09-15)
+
+Host access now works. GPU is RTX A6000 (49,140 MiB), driver 580.105.08, torch
+2.7.0+cu126. User planning rate is $1.09/GPU-hour. Prior A100 projection is obsolete.
+Use `python -m preanchor.labels.a6000` for this session; old `labels.pilot` retains
+historical A100 admission and must not launch this production run.
+Server concurrency is `PREANCHOR_REQUEST_CONCURRENCY` (initial 2, eligible 3).
+The runner requires matching server/client concurrency and recorded startup log.
+Benchmark -> select (immutable A6000 projection) -> execute explicit production
+run ID -> stop vLLM -> finalize. All long commands are launched in tmux with NFS
+logs. `execute` validates and resumes raw completion units; it never schedules
+adaptive indices. No Stage 6 command is authorized.

@@ -177,3 +177,34 @@ Stage 3/4 (working tree after `060f6c0`):
   More than 5% truncation also stops for diagnosis. Existing benchmark measurements
   are reused because prompt/model/sampling semantics are unchanged.
 - **fact** — Draft PR #2 is stacked on codex/mvp; PR #1 remains unchanged.
+
+## A6000 Stage 5 batching (2026-09-15; commit introducing this entry, parent fce899f)
+
+- **fact** — Actual GPU is RTX A6000, 49,140 MiB, driver 580.105.08, torch
+  2.7.0+cu126. Doctor passes; pinned vLLM image is installed. Restored Stage 3
+  Parquet checksums exist; no restored Stage 5 completion payload exists.
+  Rejected alternative: counting historical progress metadata as completed work.
+- **choice** — User-authorized runtime amendment
+  `artifacts/amendments/20260915T102700Z.md` supersedes SPEC's A6000 concurrency-one
+  guidance. Benchmark B2 then memory-admitted B3 with unchanged prompts, seeds,
+  sampling, tokenizer, model and similarity semantics. Runtime has a separate
+  resolved hash, leaving canonical rollout IDs invariant. New production run ID.
+  Rejected alternative: changing scientific config to encode scheduler settings.
+- **fact** — B2 startup has 78,768 KV tokens, 27.61 GiB model load, 14.42 GiB KV;
+  dimensions match 48 layers × 8 KV heads × 128 × K/V × BF16 = 196,608 B/token.
+  B3 is eligible; B4 is below the 15% max-context margin and is not tested.
+- **choice** — Independent stream clocks replace global counter deltas for request
+  timings; wall-clock aggregate throughput drives comparison, ETA and cost at
+  user-supplied $1.09/h. Model-reported CUDA compatibility 13.0 is distinct from
+  torch's CUDA 12.6 build. Reject summing overlapping request durations for cost.
+- **choice** — Raw UnitStore commits happen in worker threads before their slots
+  refill; MiniLM CPU scoring occurs only after all 256 and vLLM shutdown. Queue
+  tests cover response/seed identities, duplication, corruption, no rewrites,
+  continuous refill and SIGKILL recovery. Never share mutable scoring state.
+- **fact** — Inspection found whole-continuation answer normalization and an
+  incorrect unequal-support smoothing helper in historical code. New fresh-pilot
+  label construction follows literal SPEC §3.6 and pinned upstream answer parsing;
+  tests use unequal category counts and hand-calculated probabilities. Historical
+  artifacts are not changed and need a separate audit before interpretation.
+  Rejected alternative: silently reusing faulty helpers or silently replacing old
+  results. No scientific formula is changed.
