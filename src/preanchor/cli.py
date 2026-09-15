@@ -212,6 +212,86 @@ def validate_data_command() -> None:
                            "unresolved": 0}))
 
 
+@app.command("fetch-raw-resamples")
+def fetch_raw_resamples_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    discover: Annotated[bool, typer.Option()] = False,
+    run_id: Annotated[str | None, typer.Option()] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    workers: Annotated[int, typer.Option(min=1, max=8)] = 4,
+    limit: Annotated[int | None, typer.Option(min=1)] = None,
+) -> None:
+    """Stage 4 fallback: pin and fetch every raw fork file for the 40 trajectories."""
+    import os
+
+    from preanchor.labels.stage4 import discover_raw, run_raw_fetch, save_raw_discovery
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    os.environ["HF_HOME"] = str(root / "cache/huggingface")
+    repo = Path(__file__).resolve().parents[2]
+    loaded = load_config(config)
+    if discover:
+        if resume or run_id or limit:
+            raise typer.BadParameter("Discovery cannot resume a fetch run")
+        found = discover_raw(loaded)
+        save_raw_discovery(found, repo)
+        typer.echo(json.dumps({"files": len(found["files"]),
+                               "bytes": sum(r["size"] for r in found["files"]),
+                               "trajectories": len(found["forks_per_trajectory"])}))
+        return
+    if resume and not run_id:
+        raise typer.BadParameter("--resume requires --run-id")
+    directory = run_path(run_id) if run_id else create_run(root, repo, loaded, [
+        f"preanchor fetch-raw-resamples --config {config} --workers {workers} --limit {limit}"])
+    result = run_raw_fetch(directory, repo, loaded, root / "cache/huggingface/hub",
+                           resume=resume, workers=workers, limit=limit)
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
+@app.command("audit-upstream")
+def audit_upstream_command(
+    raw_run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    run_id: Annotated[str | None, typer.Option()] = None,
+    device: Annotated[str, typer.Option()] = "cpu",
+) -> None:
+    """Problem 4682 released-versus-canonical/legacy audit (SPEC §3.6 gate)."""
+    from preanchor.labels.stage4 import audit_4682
+
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    loaded = load_config(config)
+    raw_run = run_path(raw_run_id)
+    directory = run_path(run_id) if run_id else create_run(root, repo, loaded, [
+        f"preanchor audit-upstream --config {config} --raw-run-id {raw_run_id}"])
+    report = audit_4682(directory, repo, loaded, root, raw_run, device=device)
+    typer.echo(json.dumps({"run_id": directory.name, **report}, sort_keys=True, default=str))
+
+
+@app.command("build-labels")
+def build_labels_command(
+    run_id: Annotated[str, typer.Option()],
+    raw_run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    device: Annotated[str, typer.Option()] = "cpu",
+    publish: Annotated[bool, typer.Option()] = True,
+) -> None:
+    """Build canonical/legacy/primary labels for all 40 trajectories after the audit."""
+    from preanchor.labels.stage4 import build_labels
+
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    loaded = load_config(config)
+    summary = build_labels(run_path(run_id), repo, loaded, root, run_path(raw_run_id),
+                           device=device, publish=publish)
+    typer.echo(json.dumps({k: v for k, v in summary.items() if k != "per_trajectory"},
+                          sort_keys=True, default=str))
+
+
 @app.command("pilot-labels")
 def pilot_labels_command(
     config: Annotated[Path, typer.Option()] = Path("configs/pilot.yaml"),

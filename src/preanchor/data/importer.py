@@ -19,11 +19,12 @@ def import_trajectory(
             and r["trace_kind"] == trace_kind]
     def load(path: str):
         p = Path(path)
-        try:
+        if p.is_symlink() or not p.is_file():
+            raise FileNotFoundError(path)
+        if Path(str(p) + ".sha256").exists():
+            # Checksummed Stage 2 artifact: a mismatch is an error, never a silent fallback.
             return read_json(p)
-        except (ValueError, FileNotFoundError):
-            # Stage 2 manifests point to checksummed artifacts; this fallback is for unit fixtures.
-            return json.loads(p.read_bytes())
+        return json.loads(p.read_bytes())  # Unit-test fixtures without sidecars only.
 
     by_role = {r["role"]: load(r["local_path"]) for r in rows}
     base = by_role["base_solution"]
@@ -33,8 +34,9 @@ def import_trajectory(
     trajectory = trajectory_record(
         base, problem, rows[0]["local_path"], source_manifest["revision"], problem_id, trace_kind
     )
-    start = trajectory["full_cot"].find("<think>") + len("<think>")
-    spans = align_sequential(trajectory["full_cot"], chunks, max(0, start))
+    think = trajectory["full_cot"].find("<think>")
+    start = think + len("<think>") if think >= 0 else 0
+    spans = align_sequential(trajectory["full_cot"], chunks, start)
     if len(spans) != len(labels):
         raise ValueError("Released chunks and labels have different lengths")
     sentences = [sentence_record(trajectory, i, span, labels[i])
