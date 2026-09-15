@@ -444,3 +444,33 @@ Stage 3/4 (working tree after `060f6c0`):
   `configs/mvp.yaml` has resolved to `c8414238…6ef4f` (scientific `82e38884…1a948`) since
   Stage 0 (`docs/stage0_validation.md`). No configuration changed; the Stage 6 documents
   are left as written.
+
+## Stage 8 implementation (2026-09-15, branch `codex/stage8`)
+
+- **choice:** Stage 8 is its own run (`fit` creates it) whose `input_hashes` are the Stage 7
+  feature table, activation index, labels hash and `activation_run_id`. Rejected: appending
+  to the Stage 7 run, which `check_resume` refuses because the code commit differs.
+- **choice (folds):** `StratifiedGroupKFold` shuffled with
+  `derived_seed(seed_root, "cv_folds")` rather than the raw `seed_root`, matching how every
+  other seed is namespaced (`ids.derived_seed`); seeds and validation problems are stored
+  per fold in the manifest. Rejected: `random_state=seed_root` directly.
+- **choice (baseline inputs):** SPEC §3.10 names map to the frozen §3.9 columns as
+  position = `sentence_idx, generated_token_count, prefix_context_fraction`; context =
+  `prefix_token_count, log1p_prefix_token_count, previous_sentence_tokens`; uncertainty =
+  the six log-probability/entropy/margin/top-k columns; combined = all twelve. No column
+  is added or dropped.
+- **choice (selection):** every family selects its own hyperparameter (and site) from
+  train CV; the frozen binary and Ridge selections are those of
+  `activation_plus_observables` (`evaluation.primary_model`). Ridge selection uses Spearman
+  with RMSE tie-break on the `log1p` scale, the scale the probe is fitted on. Remaining ties
+  break to the smaller hyperparameter, then the lower site. The residualised control is
+  fitted only at the selected binary site.
+- **choice (integrity):** units contain no timing or attempt identifiers so regenerated
+  units are byte-identical; `select` refuses to run twice on one run (a new selection needs
+  a new `run_id`); a smoke configuration reads the feature table inside its activation run
+  while `mvp` reads the canonical publication.
+- **fact (smoke, run `20260915T191139Z-30a5e56f6f-5c6fdbe6`):** two-site real-data smoke
+  fits, selects and validates; interruption, resume, corruption/quarantine and deterministic
+  identity are covered by `tests/integration/test_probe_fit.py` on a synthetic Stage 7 run.
+- **interpretation:** smoke CV numbers are training-fold diagnostics of two sites and carry
+  no evidence about probe performance; no validation or test metric exists.

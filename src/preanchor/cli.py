@@ -579,6 +579,81 @@ def validate_features_command(
         "recomputed", "split_rows", "eligible_rows", "anchor_rows")}), sort_keys=True))
 
 
+@app.command("fit")
+def fit_command(
+    activation_run_id: Annotated[str, typer.Option(
+        help="Completed Stage 7 run whose feature table is published.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    partition: Annotated[str, typer.Option(help="Only 'train' is permitted.")] = "train",
+    run_id: Annotated[str | None, typer.Option(help="Existing Stage 8 run to resume.")] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    workers: Annotated[int | None, typer.Option(min=1, max=8)] = None,
+    limit_sites: Annotated[int | None, typer.Option(
+        min=1, help="Smoke configurations only: fit the first N sites.")] = None,
+) -> None:
+    """SPEC Stage 8: baselines and per-site probes under grouped four-fold CV on training
+    problems only; resumable at (model, site) granularity. CPU only."""
+    from preanchor.probes.fit import PARTITION, execute, prepare_run
+
+    if partition != PARTITION:
+        raise typer.BadParameter("Stage 8 fits on the training partition only")
+    if resume != (run_id is not None):
+        raise typer.BadParameter("--resume requires --run-id and vice versa")
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    activation_run = run_path(activation_run_id)
+    run = run_path(run_id) if run_id else prepare_run(root, repo, loaded, activation_run, "fit")
+    summary = execute(run, repo, loaded, resume=resume, workers=workers,
+                      limit_sites=limit_sites)
+    typer.echo(json.dumps(redact({"run_id": run.name, "n_rows": summary["n_rows"],
+                                  "n_positive": summary["n_positive"],
+                                  "units": len(summary["units"]),
+                                  "cv_results_sha256": summary["cv_results_sha256"],
+                                  "elapsed_seconds": summary["elapsed_seconds"]}),
+                          sort_keys=True))
+
+
+@app.command("select")
+def select_command(
+    run_id: Annotated[str, typer.Option(help="Stage 8 run with a complete fit.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    workers: Annotated[int | None, typer.Option(min=1, max=8)] = None,
+) -> None:
+    """Select layer and regularisation from training CV, fit the residualised control at the
+    selected site, refit on all training rows and write frozen_selection.pending.json."""
+    from preanchor.probes.select import execute
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    pending = execute(run_path(run_id), repo, loaded, workers=workers)
+    typer.echo(json.dumps(redact({"run_id": run_id, "binary": pending["binary"],
+                                  "continuous": pending["continuous"],
+                                  "selected_model_sha256": pending["selected_model_sha256"]}),
+                          sort_keys=True))
+
+
+@app.command("validate-probes")
+def validate_probes_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """Re-validate a Stage 8 run: units, coverage, train-only rows, recomputed metrics,
+    selection reproducibility and model serialisation."""
+    from preanchor.probes.validate import validate_probes
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    report = validate_probes(run_path(run_id), loaded, root)
+    typer.echo(json.dumps(redact({k: report[k] for k in (
+        "ok", "run_id", "rows", "units", "sites", "cv_rows", "prediction_rows",
+        "max_ap_recompute_diff", "selected")}), sort_keys=True))
+
+
 @app.command("validate-activations")
 def validate_activations_command(
     run_id: Annotated[str, typer.Option()],

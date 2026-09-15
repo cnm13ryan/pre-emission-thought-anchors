@@ -49,3 +49,23 @@ every label row exactly once), the joins, the allow-list, definitional and range
 invariants of every primary/diagnostic column, the published-copy identity, and recomputes
 a seeded sample of rows from the shards in float32 (exact for integer columns, `1e-5`
 for the uncertainty and diagnostic columns).
+
+## Stage 8 probe tables (`artifacts/runs/<run_id>/probe_models/`)
+
+`units/<unit_key>/` is one (probe, site) work unit with `cv_results.parquet`,
+`fold_predictions.parquet`, `unit.json` and `SUCCESS.json`; the unit key is
+`ids.cache_key(stage="stage8_fit", ...)` over the scientific config hash, code commit,
+Stage 7 input hashes, partition and fold seed. Units are byte-deterministic; timings live
+only in `stages/stage8/summary.json`.
+
+`cv_results.parquet`: one row per (`probe_name`, `layer`, `task`, `hyperparameter`,
+`fold`) with fold sizes and class counts, the validation problems of the fold,
+`average_precision`/`auroc` (binary) or `spearman`/`rmse` (continuous), `converged`.
+
+`fold_predictions.parquet`: SPEC §5 prediction columns (`split` is always `train`,
+`lead_sentences` 0, `threshold_quantile` 0.9) plus `task`, `hyperparameter`, `fold`;
+`importance_true` and `importance_predicted` are on the `log1p` scale of the Ridge target.
+
+`selected_model.joblib`: `{"models": {family:task -> record}, "pipelines": {...}}` refitted
+on all training rows at each family's selected configuration.
+`frozen_selection.pending.json`: the train-CV selection Stage 9 freezes.

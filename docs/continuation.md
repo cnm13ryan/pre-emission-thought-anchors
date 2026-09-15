@@ -305,3 +305,20 @@ verified portable backup covering the Stage 7 run (the sibling session extended
 added, using `STAGE_DEPENDENCIES` in `src/preanchor/backup/classify.py`), then explicit
 user authorisation. Probes read `PRIMARY_FEATURES` only and load one layer at a time from
 the shards through the `shard_path`/`row_idx` pointers of the feature table.
+
+## Stage 8 implementation (2026-09-15, branch `codex/stage8`)
+
+`preanchor fit`, `select`, `validate-probes` and `src/preanchor/probes/` implement SPEC
+Stage 8 (`docs/stage8_plan.md`, `docs/test_lock_protocol.md`). Validated on synthetic runs
+and the two-site real-data smoke `20260915T191139Z-30a5e56f6f-5c6fdbe6`. **Production is
+not run**: it waits for the Stage 7 MacBook `pull_verification` receipt (bundle for stage
+7) and explicit authorisation. Launch pattern:
+
+```bash
+tmux new-session -d -s stage8 'cd ~/preanchor-stage8 && set -a && . .env && set +a && \
+  CUDA_VISIBLE_DEVICES="" uv run --frozen preanchor fit --config configs/mvp.yaml \
+  --activation-run-id 20260915T182306Z-3ab408d80a-7452f1c2 --workers 8'
+uv run --frozen preanchor select --config configs/mvp.yaml --run-id <S8>
+uv run --frozen preanchor validate-probes --config configs/mvp.yaml --run-id <S8>
+```
+Resume: `fit --config configs/mvp.yaml --resume --run-id <S8> --activation-run-id <S7>`.
