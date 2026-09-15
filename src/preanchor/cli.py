@@ -164,10 +164,11 @@ def import_data_command(
 ) -> None:
     """Import exact released traces and sequentially align their chunks."""
     from preanchor.data.importer import import_all
+    from preanchor.io import read_json
 
     root = Settings().persistent_root()
-    run = root / "artifacts/runs" / run_id
-    manifest = json.loads((run / "stages/stage2/source_manifest.json").read_bytes())
+    run = run_path(run_id)  # Validated charset and existence; never a raw path join.
+    manifest = read_json(run / "stages/stage2/source_manifest.json")
     loaded = load_config(config)
     output = root / "data/processed/stage3"
     result = import_all(manifest, loaded.dataset.problem_ids, output)

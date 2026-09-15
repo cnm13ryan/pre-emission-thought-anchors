@@ -57,3 +57,18 @@ Benchmark -> select (immutable A6000 projection) -> execute explicit production
 run ID -> stop vLLM -> finalize. All long commands are launched in tmux with NFS
 logs. `execute` validates and resumes raw completion units; it never schedules
 adaptive indices. No Stage 6 command is authorized.
+
+## Stage 4 commands (2026-09-15)
+
+```bash
+uv run --frozen preanchor fetch-raw-resamples --discover        # pins configs/locks/raw_resample_*
+uv run --frozen preanchor fetch-raw-resamples --workers 6        # provenance run; --resume --run-id ID
+uv run --frozen preanchor validate-raw-resamples --run-id RAW --no-require-identity
+HF_HUB_CACHE=$PREANCHOR_ROOT/cache/huggingface/datasets-hub \
+  uv run --frozen preanchor audit-upstream --raw-run-id RAW --device cuda
+HF_HUB_CACHE=$PREANCHOR_ROOT/cache/huggingface/datasets-hub \
+  uv run --frozen preanchor build-labels --run-id AUDIT_RUN --raw-run-id RAW --device cuda
+```
+
+Stage 5 production now requires `PREANCHOR_HOURLY_RATE` in `.env`, a completed
+benchmark run, and `python -m preanchor.labels.pilot --prepare --benchmark-run-id BENCH`.
