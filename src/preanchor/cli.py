@@ -243,9 +243,16 @@ def fetch_raw_resamples_command(
         return
     if resume and not run_id:
         raise typer.BadParameter("--resume requires --run-id")
+    # The shared hub cache can be root-owned (created through the vLLM container mount);
+    # transit downloads then use a sibling cache the user owns. Units hold the bytes.
+    cache_dir = root / "cache/huggingface/hub"
+    if not os.access(cache_dir, os.W_OK):
+        cache_dir = root / "cache/huggingface/datasets-hub"
+        cache_dir.mkdir(parents=True, exist_ok=True)
     directory = run_path(run_id) if run_id else create_run(root, repo, loaded, [
-        f"preanchor fetch-raw-resamples --config {config} --workers {workers} --limit {limit}"])
-    result = run_raw_fetch(directory, repo, loaded, root / "cache/huggingface/hub",
+        f"preanchor fetch-raw-resamples --config {config} --workers {workers} --limit {limit}"
+        f" --cache-dir {cache_dir}"])
+    result = run_raw_fetch(directory, repo, loaded, cache_dir,
                            resume=resume, workers=workers, limit=limit)
     typer.echo(json.dumps(result, sort_keys=True))
 
