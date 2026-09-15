@@ -38,8 +38,10 @@ CLASSIFICATIONS = (MUST_BACK_UP, SHOULD_BACK_UP, REACQUIRE, CACHE_EXCLUDE,
 # Stage 6 (the fresh pilot is a required experiment), so a Stage 6 bundle carries it too.
 # Stage 7 reads Stage 3 and Stage 4; Stage 5 stays a continuation dependency and Stage 6 is
 # the admission evidence (measured fit and the launch projection) of the Stage 7 run.
+# Stage 8 reads the Stage 7 table and shards; Stage 9 reads the Stage 8 selection and models.
 STAGE_DEPENDENCIES: dict[int, tuple[int, ...]] = {3: (), 4: (3,), 5: (3,), 6: (3, 4, 5),
-                                                  7: (3, 4, 5, 6)}
+                                                  7: (3, 4, 5, 6), 8: (3, 4, 5, 6, 7),
+                                                  9: (3, 4, 5, 6, 7, 8)}
 KNOWN_STAGES = tuple(sorted(STAGE_DEPENDENCIES))
 
 STAGE3_FILES = ("trajectories.parquet", "sentences.parquet")
@@ -48,6 +50,15 @@ STAGE6_INPUTS = ("stage3/trajectories.parquet", "stage3/sentences.parquet",
 STAGE6_RECORDS = ("summary.json", "invariance_report.json", "resource_projection.json",
                   "boundary_audit.json")
 ACTIVATION_UNITS = PurePosixPath("activations/units")
+PROBE_UNITS = PurePosixPath("probe_models/units")
+STAGE8_OUTPUTS = ("probe_models/cv_results.parquet", "probe_models/fold_predictions.parquet",
+                  "probe_models/selected_model.joblib",
+                  "probe_models/frozen_selection.pending.json")
+STAGE9_OUTPUTS = ("frozen_selection.json", "metrics/analysis_registry.json",
+                  "probe_models/calibrator.json", "predictions/validation.parquet",
+                  "metrics/validation.json")
+STAGE9_TEST_OUTPUTS = ("predictions/test.parquet", "metrics/test.json",
+                       "metrics/test_receipt.json")
 STAGE7_RECORDS = ("summary.json", "resource_projection.json")
 STAGE7_FEATURE_RECORDS = ("feature_audit.json", "feature_validation.json")
 STAGE7_PUBLISHED = ("features.parquet", "features.parquet.schema.json", "feature_audit.json")
@@ -184,7 +195,7 @@ def _run_files(run: Path):
         rel = Path(directory).relative_to(run)
         if len(rel.parts) == 2 and rel.parts[0] == "stages":
             subdirs[:] = [d for d in subdirs if d not in UNIT_NAMESPACES]
-        if rel.parts == ("activations",):
+        if rel.parts in (("activations",), ("probe_models",)):
             subdirs[:] = [d for d in subdirs if d != "units"]
         for name in names:
             yield Path(directory) / name
@@ -285,6 +296,13 @@ def _run_file(role: str, rel: PurePosixPath, finalized: bool) -> tuple[str, str,
         if name.endswith(".parquet"):
             return MUST_BACK_UP, "parquet", True
         return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
+    if parts[0] in ("probe_models", "predictions", "metrics") or name.startswith(
+            "frozen_selection.json"):
+        # Stage 8 selection artifacts and Stage 9 freeze, calibrator, predictions, metrics
+        # and the test receipt: every one carries a sidecar (parquet also a schema record).
+        if name.endswith(".parquet"):
+            return MUST_BACK_UP, "parquet", True
+        return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
     if parts[0] == "stages" and len(parts) >= 3:
         rest = parts[2:]
         if rest[0] in ("progress.json", "telemetry.json", "startup.log", "telemetry",
@@ -335,6 +353,8 @@ def collect_run(root: Path, run_id: str, role: str, stage: str, inventory: Inven
                   if d.name in UNIT_NAMESPACES and d.is_dir()]
     if (run / ACTIVATION_UNITS).is_dir():
         namespaces.append(run / ACTIVATION_UNITS)
+    if (run / PROBE_UNITS).is_dir():
+        namespaces.append(run / PROBE_UNITS)
     for namespace_dir in namespaces:
         namespace_logical = f"artifacts/runs/{run_id}/{namespace_dir.relative_to(run).as_posix()}"
         if role in ("stage2", "stage4_raw", "historical"):
@@ -640,6 +660,16 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
                              note_revisions=note_revisions)
     inventory.stages["stage7"] = stage7
 
+    # ---- Stage 8 (training-CV probe fit and selection) -----------------------------
+    stage8 = discover_stage8(root, manifests, inventory, stage7, required=8 in required,
+                             note_revisions=note_revisions)
+    inventory.stages["stage8"] = stage8
+
+    # ---- Stage 9 (validation calibration, freeze, locked test) ---------------------
+    stage9 = discover_stage9(root, manifests, inventory, stage8, required=9 in required,
+                             note_revisions=note_revisions)
+    inventory.stages["stage9"] = stage9
+
     # ---- Provenance and evidence trees ---------------------------------------------
     collect_tree(root, "artifacts/reconstruction", MUST_BACK_UP, "provenance", inventory)
     collect_tree(root, "artifacts/amendments", MUST_BACK_UP, "provenance", inventory)
@@ -751,6 +781,10 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
         if stage6.get("status") == "complete" else {},
         "stage7": {k: v for k, v in stage7.items() if k != "status"}
         if stage7.get("status") == "complete" else {},
+        "stage8": {k: v for k, v in stage8.items() if k != "status"}
+        if stage8.get("status") == "complete" else {},
+        "stage9": {k: v for k, v in stage9.items() if k != "status"}
+        if stage9.get("status") == "complete" else {},
         "revisions": single, "vllm_digest": DIGEST,
         "resolved_config_hashes": {}, "scientific_config_hashes": {},
         "producing_commits": {}, "dirty_diff_hashes": {}, "lock_hashes": {}, "run_ids": []}
@@ -981,6 +1015,211 @@ def discover_stage7(root: Path, manifests: dict[str, dict], inventory: Inventory
                           "relocated smoke publications; the run copies are protected")
     return {"status": "complete", "run_id": canonical, "input_hashes": expected,
             "published_features_sha256": published_sha, **summary}
+
+
+def stage8_run_summary(run: Path) -> dict:
+    """Validate the records a finalized Stage 8 run must carry and extract its identity:
+    the fit summary, the four selection outputs with the hashes the manifest and the
+    pending selection record for them, and the validate-probes record after selection."""
+    manifest = load_manifest(run)
+    for stage in ("stage8_fit", "stage8_select"):
+        if manifest["stages"].get(stage, {}).get("state") != "complete":
+            raise ValueError(f"{stage} is not complete")
+    validate_artifact(run / "stages/stage8/summary.json")
+    summary = read_json(run / "stages/stage8/summary.json")
+    hashes = {}
+    for name in STAGE8_OUTPUTS:
+        digest = validate_artifact(run / name)
+        if manifest["output_hashes"].get(name) != digest:
+            raise ValueError(f"{name} differs from the run manifest")
+        hashes[name] = digest
+    pending = read_json(run / "probe_models/frozen_selection.pending.json")
+    if pending.get("status") != "pending" or pending.get("run_id") != run.name:
+        raise ValueError("pending selection does not belong to the run")
+    if (pending["selected_model_sha256"], pending["cv_results_sha256"],
+            pending["fold_predictions_sha256"]) != tuple(hashes[n] for n in STAGE8_OUTPUTS[2:3]
+                                                        + STAGE8_OUTPUTS[:2]):
+        raise ValueError("pending selection hashes differ from the selection artifacts")
+    if pending.get("selection_basis") != "train_cv_only":
+        raise ValueError("selection basis is not training CV")
+    report = read_json(run / "probe_models/probe_validation.json")
+    if not (report.get("ok") and report.get("selected") and report.get("run_id") == run.name):
+        raise ValueError("validate-probes did not pass after selection")
+    units = sorted(u["key"] for u in summary["units"])
+    units.append(pending["residualized_control"]["unit_key"])
+    return {"n_units": len(units), "unit_keys": sorted(units), "n_rows": summary["n_rows"],
+            "n_positive": summary["n_positive"], "anchor_threshold": summary["anchor_threshold"],
+            "train_rows_sha256": summary["train_rows_sha256"], "fold_seed": pending["fold_seed"],
+            "binary": pending["binary"], "continuous": pending["continuous"],
+            "output_hashes": hashes, "input_hashes": dict(manifest["input_hashes"]),
+            "pending_sha256": hashes["probe_models/frozen_selection.pending.json"],
+            "scientific_config_hash": pending["scientific_config_hash"],
+            "sites": report.get("sites")}
+
+
+def discover_stage8(root: Path, manifests: dict[str, dict], inventory: Inventory, stage7: dict,
+                    *, required: bool, note_revisions) -> dict:
+    """The canonical Stage 8 run is the finalized fit + select + validate-probes run whose
+    inputs are exactly the canonical Stage 7 run's table, index and labels."""
+    if stage7.get("status") != "complete":
+        if required:
+            inventory.blockers.append("Stage 8 needs a canonical Stage 7 run")
+        return {"status": "absent"}
+    expected = {"activation_run_id": stage7["run_id"],
+                "activations/index.parquet": stage7["index_sha256"],
+                "stage7/features.parquet": stage7["published_features_sha256"],
+                "stage4/labels.parquet": stage7["input_hashes"]["stage4/labels.parquet"]}
+    canonical: str | None = None
+    summary: dict = {}
+    for name, manifest in sorted(manifests.items()):
+        stage = manifest.get("stages", {}).get("stage8_fit")
+        if not stage:
+            continue
+        select = manifest.get("stages", {}).get("stage8_select") or {}
+        if stage.get("state") != "complete" or select.get("state") != "complete":
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": f"stage8_fit_{stage.get('state')}_select_"
+                                              f"{select.get('state')}"}
+            continue
+        if manifest.get("input_hashes") != expected:
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "input_hashes_differ_from_canonical_stage7"}
+            continue
+        if stage.get("n_sites") != stage7.get("n_layers", -2) + 1 or stage.get("limit_sites"):
+            # Sites = embedding + every decoder block. A smoke fit on a subset of sites
+            # reads the same inputs but is not the SPEC §3.12 all-site fit.
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "site_count_differs_from_stage7"}
+            continue
+        try:
+            candidate = stage8_run_summary(root / "artifacts/runs" / name)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            inventory.blockers.append(f"{name}: Stage 8 records invalid ({exc})")
+            continue
+        if canonical is not None:
+            inventory.blockers.append(f"{name} and {canonical} are both finalized Stage 8 runs "
+                                      "on the canonical Stage 7 inputs")
+            continue
+        canonical, summary = name, candidate
+    if canonical is None:
+        if required:
+            inventory.blockers.append("No finalized Stage 8 run (fit, select, validate-probes) "
+                                      "reads the canonical Stage 7 inputs")
+        return {"status": "absent"}
+    inventory.runs[canonical] = {"role": "stage8_production", "stage": "stage8"}
+    note_revisions(manifests[canonical])
+    counts = collect_run(root, canonical, "stage8_production", "stage8", inventory,
+                         required_stage=required, finalized=True,
+                         expected_units=set(summary["unit_keys"]))
+    if counts["valid_units"] != summary["n_units"]:
+        inventory.blockers.append(f"{canonical}: {summary['n_units'] - counts['valid_units']} "
+                                  "probe units are missing or invalid")
+    return {"status": "complete", "run_id": canonical, **summary}
+
+
+def stage9_run_summary(run: Path) -> dict:
+    """Validate a frozen Stage 9 run: the freeze and every artifact it names, and, when the
+    held-out test was evaluated, the receipt and the outputs it hashes."""
+    manifest = load_manifest(run)
+    freeze_stage = manifest["stages"].get("stage9_freeze") or {}
+    if manifest["stages"].get("stage9_calibrate", {}).get("state") != "complete" \
+            or freeze_stage.get("state") != "complete":
+        raise ValueError("calibration or freeze is not complete")
+    hashes = {}
+    for name in STAGE9_OUTPUTS:
+        digest = validate_artifact(run / name)
+        if manifest["output_hashes"].get(name) != digest:
+            raise ValueError(f"{name} differs from the run manifest")
+        hashes[name] = digest
+    freeze_sha = hashes["frozen_selection.json"]
+    if freeze_stage.get("freeze_sha256") != freeze_sha:
+        raise ValueError("freeze hash differs from the manifest record")
+    frozen = read_json(run / "frozen_selection.json")
+    if frozen.get("status") != "frozen" or frozen.get("run_id") != run.name:
+        raise ValueError("freeze record does not belong to the run")
+    if frozen["analysis_registry_sha256"] != hashes["metrics/analysis_registry.json"] \
+            or frozen["calibration"]["calibrator_sha256"] != hashes[
+                "probe_models/calibrator.json"] \
+            or frozen["validation_predictions_sha256"] != hashes["predictions/validation.parquet"] \
+            or frozen["validation_metrics_sha256"] != hashes["metrics/validation.json"]:
+        raise ValueError("freeze names other validation artifacts than the run holds")
+    test = manifest["stages"].get("stage9_test") or {}
+    evaluated = test.get("state") == "complete"
+    receipt = None
+    if evaluated:
+        for name in STAGE9_TEST_OUTPUTS:
+            digest = validate_artifact(run / name)
+            if manifest["output_hashes"].get(name) != digest:
+                raise ValueError(f"{name} differs from the run manifest")
+            hashes[name] = digest
+        receipt = read_json(run / "metrics/test_receipt.json")
+        if receipt["freeze_sha256"] != freeze_sha or receipt["run_id"] != run.name \
+                or receipt["predictions_sha256"] != hashes["predictions/test.parquet"] \
+                or receipt["metrics_sha256"] != hashes["metrics/test.json"]:
+            raise ValueError("test receipt does not match the freeze and the outputs")
+    elif any((run / name).exists() for name in STAGE9_TEST_OUTPUTS):
+        raise ValueError("test outputs exist without a complete evaluation record")
+    return {"freeze_sha256": freeze_sha, "probe_run_id": frozen["probe_run_id"],
+            "binary": frozen["binary"], "continuous": frozen["continuous"],
+            "anchor_threshold": frozen["anchor_threshold"],
+            "calibration_fitted": frozen["calibration"]["fitted"],
+            "calibration_skip_reason": frozen["calibration"]["skip_reason"],
+            "analysis_registry_sha256": frozen["analysis_registry_sha256"],
+            "test_evaluated": evaluated, "test_attempts": len(test.get("attempts") or []),
+            "test_receipt": {k: receipt[k] for k in ("evaluated_at", "n_rows", "n_positive",
+                                                     "n_problems", "problems",
+                                                     "predictions_sha256", "metrics_sha256")}
+            if receipt else None,
+            "output_hashes": hashes, "input_hashes": dict(manifest["input_hashes"]),
+            "code_commit": frozen["code_commit"]}
+
+
+def discover_stage9(root: Path, manifests: dict[str, dict], inventory: Inventory, stage8: dict,
+                    *, required: bool, note_revisions) -> dict:
+    """The canonical Stage 9 run is the frozen run whose inputs are exactly the canonical
+    Stage 8 run's selection artifacts. Unfrozen or foreign runs stay historical."""
+    if stage8.get("status") != "complete":
+        if required:
+            inventory.blockers.append("Stage 9 needs a canonical Stage 8 run")
+        return {"status": "absent"}
+    expected = {**stage8["input_hashes"], "probe_run_id": stage8["run_id"],
+                **stage8["output_hashes"]}
+    canonical: str | None = None
+    summary: dict = {}
+    for name, manifest in sorted(manifests.items()):
+        stage = manifest.get("stages", {}).get("stage9_calibrate")
+        if not stage:
+            continue
+        freeze = manifest.get("stages", {}).get("stage9_freeze") or {}
+        if freeze.get("state") != "complete":
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": f"stage9_calibrate_{stage.get('state')}_freeze_"
+                                              f"{freeze.get('state')}"}
+            continue
+        if manifest.get("input_hashes") != expected:
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "input_hashes_differ_from_canonical_stage8"}
+            continue
+        try:
+            candidate = stage9_run_summary(root / "artifacts/runs" / name)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            inventory.blockers.append(f"{name}: Stage 9 records invalid ({exc})")
+            continue
+        if canonical is not None:
+            inventory.blockers.append(f"{name} and {canonical} are both frozen Stage 9 runs on "
+                                      "the canonical Stage 8 selection; pass --run-id")
+            continue
+        canonical, summary = name, candidate
+    if canonical is None:
+        if required:
+            inventory.blockers.append("No frozen Stage 9 run reads the canonical Stage 8 "
+                                      "selection")
+        return {"status": "absent"}
+    inventory.runs[canonical] = {"role": "stage9_production", "stage": "stage9"}
+    note_revisions(manifests[canonical])
+    collect_run(root, canonical, "stage9_production", "stage9", inventory,
+                required_stage=required, finalized=True)
+    return {"status": "complete", "run_id": canonical, **summary}
 
 
 def highest_protected_stage(inventory: Inventory) -> int | None:
