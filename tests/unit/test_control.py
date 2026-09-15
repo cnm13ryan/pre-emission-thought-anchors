@@ -201,6 +201,7 @@ def test_interrupted_acquisition_leaves_one_incomplete_owner(control):
 
 
 @pytest.mark.parametrize("name", ["", "../x", "gpu/h100", "a:", ":a", "gpu:..", "x" * 70,
+                                  "gpu__h100",
                                   "gpu h100", "/abs", "a:b:c:d:e"])
 def test_malformed_resource_names_fail_closed(control, name):
     with pytest.raises(ControlError, match="Malformed"):

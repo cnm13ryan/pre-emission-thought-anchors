@@ -89,6 +89,35 @@ def test_model_and_head_loaders_reject_before_loading_without_the_gpu_lease(tmp_
     assert not isinstance(excinfo.value, LeaseRequired)
 
 
+def test_minilm_scorers_reject_a_gpu_device_without_the_lease(tmp_path, monkeypatch):
+    """`audit-upstream`/`build-labels --device cuda` (docs/lambda_runbook.md) put MiniLM on
+    the shared GPU through these two classes; they are gated like the big loaders."""
+    from preanchor.labels.generate import MiniLMSimilarityScorer
+    from preanchor.labels.similarity import ReplacementSimilarity
+
+    monkeypatch.setenv("PREANCHOR_ROOT", str(tmp_path / "root"))
+    monkeypatch.delenv(TOKENS_ENV, raising=False)
+    monkeypatch.setitem(sys.modules, "sentence_transformers", None)   # import would fail
+    for device in ("cuda", "cuda:0"):
+        with pytest.raises(LeaseRequired, match="gpu:h100"):
+            ReplacementSimilarity(device=device)
+        with pytest.raises(LeaseRequired, match="gpu:h100"):
+            MiniLMSimilarityScorer(device=device)
+    for factory in (lambda: ReplacementSimilarity(device="cpu"),
+                    lambda: MiniLMSimilarityScorer(device="cpu")):
+        with pytest.raises(Exception) as excinfo:
+            factory()                                   # CPU path is not gated
+        assert not isinstance(excinfo.value, LeaseRequired)
+    control = control_root()
+    session = sessions.register(control, task="t", role="tests", worktree=None)
+    token = leases.acquire(control, "gpu:h100", session_id=session["session_id"],
+                           purpose="p")["owner_token"]
+    monkeypatch.setenv(TOKENS_ENV, f"gpu:h100={token}")
+    with pytest.raises(Exception) as excinfo:
+        ReplacementSimilarity(device="cuda")            # gate passes, import stub fails
+    assert not isinstance(excinfo.value, LeaseRequired)
+
+
 def test_start_vllm_refuses_without_both_leases_before_touching_docker(tmp_path):
     root = tmp_path / "root"
     binaries = tmp_path / "bin"

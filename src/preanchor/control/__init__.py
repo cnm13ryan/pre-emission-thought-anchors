@@ -37,7 +37,8 @@ def control_root(root: Path | None = None) -> Path:
 
 def safe_name(resource: str) -> str:
     """Directory-safe form of a resource or session name; anything else fails closed."""
-    if not isinstance(resource, str) or not _NAME.match(resource) or ".." in resource:
+    if (not isinstance(resource, str) or not _NAME.match(resource) or ".." in resource
+            or "__" in resource):   # "__" is the on-disk escape for ":"; never let it alias
         raise ControlError(f"Malformed resource name: {resource!r}")
     return resource.replace(":", "__")
 
