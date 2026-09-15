@@ -174,6 +174,10 @@ class MiniLMSimilarityScorer:
     """Pinned MiniLM scorer used after canonical extraction."""
 
     def __init__(self, *, device: str = "cpu"):
+        if device != "cpu":
+            from preanchor.control.leases import require
+
+            require(["gpu:h100"])   # MiniLM on the shared GPU still needs its owner
         from sentence_transformers import SentenceTransformer
 
         self.model = SentenceTransformer(

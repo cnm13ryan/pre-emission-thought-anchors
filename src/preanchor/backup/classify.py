@@ -5,7 +5,9 @@ filesystem, never from run IDs written into code. Runtime dependencies are trace
 actual consumers: Stage 4 labels read Stage 3 tables and a raw-resample run; Stage 5
 rollout identity hashes the Stage 3 tables and the frozen target mapping (``pilot.inputs``);
 Stage 6 activation runs hash the Stage 3 tables and the Stage 4 labels
-(``features.extract.load_inputs``) and are the measured-fit admission evidence for Stage 7.
+(``features.extract.load_inputs``) and are the measured-fit admission evidence for Stage 7;
+the Stage 7 run reads the same tables, and its ``build-dataset`` joins the Stage 4 labels
+into the published feature table (``features.dataset``), which Stage 8 consumes.
 """
 
 from __future__ import annotations
@@ -34,7 +36,10 @@ CLASSIFICATIONS = (MUST_BACK_UP, SHOULD_BACK_UP, REACQUIRE, CACHE_EXCLUDE,
 # Runtime input dependencies between canonical stages (consumer -> producers).
 # Stage 6 reads Stage 3 and Stage 4; Stage 5 is a continuation dependency of the MVP after
 # Stage 6 (the fresh pilot is a required experiment), so a Stage 6 bundle carries it too.
-STAGE_DEPENDENCIES: dict[int, tuple[int, ...]] = {3: (), 4: (3,), 5: (3,), 6: (3, 4, 5)}
+# Stage 7 reads Stage 3 and Stage 4; Stage 5 stays a continuation dependency and Stage 6 is
+# the admission evidence (measured fit and the launch projection) of the Stage 7 run.
+STAGE_DEPENDENCIES: dict[int, tuple[int, ...]] = {3: (), 4: (3,), 5: (3,), 6: (3, 4, 5),
+                                                  7: (3, 4, 5, 6)}
 KNOWN_STAGES = tuple(sorted(STAGE_DEPENDENCIES))
 
 STAGE3_FILES = ("trajectories.parquet", "sentences.parquet")
@@ -43,6 +48,9 @@ STAGE6_INPUTS = ("stage3/trajectories.parquet", "stage3/sentences.parquet",
 STAGE6_RECORDS = ("summary.json", "invariance_report.json", "resource_projection.json",
                   "boundary_audit.json")
 ACTIVATION_UNITS = PurePosixPath("activations/units")
+STAGE7_RECORDS = ("summary.json", "resource_projection.json")
+STAGE7_FEATURE_RECORDS = ("feature_audit.json", "feature_validation.json")
+STAGE7_PUBLISHED = ("features.parquet", "features.parquet.schema.json", "feature_audit.json")
 PILOT_TARGETS = "configs/pilot_targets_4682.yaml"
 UNIT_NAMESPACES = {"units", "units_raw", "benchmark_units", "benchmark_units_raw"}
 LIVE_STATES = {"prepared", "running", "stopped"}
@@ -268,6 +276,12 @@ def _run_file(role: str, rel: PurePosixPath, finalized: bool) -> tuple[str, str,
     if parts[0] in ("environment", "logs"):
         return SHOULD_BACK_UP, "bytes", False
     if parts[0] == "activations":
+        if name.endswith(".parquet"):
+            return MUST_BACK_UP, "parquet", True
+        return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
+    if parts[0] == "features":
+        if len(parts) >= 2 and parts[1] == "failures":
+            return SHOULD_BACK_UP, "bytes", False
         if name.endswith(".parquet"):
             return MUST_BACK_UP, "parquet", True
         return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
@@ -621,6 +635,11 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
                              note_revisions=note_revisions)
     inventory.stages["stage6"] = stage6
 
+    # ---- Stage 7 (full activation and feature extraction) --------------------------
+    stage7 = discover_stage7(root, manifests, inventory, required=7 in required,
+                             note_revisions=note_revisions)
+    inventory.stages["stage7"] = stage7
+
     # ---- Provenance and evidence trees ---------------------------------------------
     collect_tree(root, "artifacts/reconstruction", MUST_BACK_UP, "provenance", inventory)
     collect_tree(root, "artifacts/amendments", MUST_BACK_UP, "provenance", inventory)
@@ -730,6 +749,8 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
                                               "benchmark_run_ids")} if production else {},
         "stage6": {k: v for k, v in stage6.items() if k != "status"}
         if stage6.get("status") == "complete" else {},
+        "stage7": {k: v for k, v in stage7.items() if k != "status"}
+        if stage7.get("status") == "complete" else {},
         "revisions": single, "vllm_digest": DIGEST,
         "resolved_config_hashes": {}, "scientific_config_hashes": {},
         "producing_commits": {}, "dirty_diff_hashes": {}, "lock_hashes": {}, "run_ids": []}
@@ -831,6 +852,135 @@ def discover_stage6(root: Path, manifests: dict[str, dict], inventory: Inventory
     return {"status": "complete", "run_ids": sorted(runs), "input_hashes": expected,
             "runs": runs, "total_rows": sum(r["n_rows"] for r in runs.values()),
             "total_units": sum(r["n_units"] for r in runs.values())}
+
+
+def stage7_run_summary(run: Path) -> dict:
+    """Validate the records a complete Stage 7 run must carry and extract its identity:
+    the extraction summary and projection, the activation index, the feature table with
+    its audit and validation record, and the hashes that tie them together."""
+    stage = run / "stages/stage7"
+    features = run / "features"
+    for name in STAGE7_RECORDS:
+        validate_artifact(stage / name)
+    for name in STAGE7_FEATURE_RECORDS:
+        validate_artifact(features / name)
+    summary = read_json(stage / "summary.json")
+    projection = read_json(stage / "resource_projection.json")
+    audit = read_json(features / "feature_audit.json")
+    validation = read_json(features / "feature_validation.json")
+    index = validate_parquet(run / "activations/index.parquet")
+    table = validate_parquet(features / "features.parquet")
+    features_sha = file_hash(features / "features.parquet")
+    units = {u["unit_key"]: u for u in summary["units"]}
+    if index.num_rows != summary["n_rows"] or len(units) != summary["n_units"]:
+        raise ValueError("index rows or unit count differ from summary.json")
+    keys = {p.split("/")[1] for p in index.column("shard_path").to_pylist()}
+    if keys != set(units):
+        raise ValueError("index shard paths do not match the summary's units")
+    if table.num_rows != summary["n_rows"]:
+        raise ValueError("feature rows differ from the activation index")
+    if set(table.column("sentence_id").to_pylist()) != set(index.column("sentence_id")
+                                                             .to_pylist()):
+        raise ValueError("feature sentence ids differ from the activation index")
+    if audit["features_sha256"] != features_sha or audit["index_sha256"] != summary[
+            "index_sha256"] or audit.get("activation_run_id") != run.name:
+        raise ValueError("feature audit does not describe this run's outputs")
+    if validation.get("features_sha256") != features_sha or not validation.get("ok"):
+        raise ValueError("feature validation record does not pass for this table")
+    return {"n_units": summary["n_units"], "n_rows": summary["n_rows"],
+            "n_tokens": summary["n_tokens"],
+            "trajectories": sorted(u["trajectory_id"] for u in units.values()),
+            "index_sha256": summary["index_sha256"], "features_sha256": features_sha,
+            "shard_sha256": {u["trajectory_id"]: u["shard_sha256"] for u in units.values()},
+            "unit_keys": sorted(units), "activation_site": summary["activation_site"],
+            "n_layers": summary["architecture"]["n_layers"],
+            "d_model": summary["architecture"]["d_model"],
+            "feature_columns": {k: audit["columns"][k] for k in ("primary", "diagnostic")},
+            "head_weights_sha256": audit["head"]["weights_sha256"],
+            "statistics_dtype": audit.get("statistics_dtype"),
+            "eligible_rows": audit["eligible_rows"], "anchor_rows": audit["anchor_rows"],
+            "projection": {k: projection.get(k) for k in ("stage", "unit_count", "row_count",
+                                                          "token_count", "projected_seconds",
+                                                          "projected_bytes", "code_commit")}}
+
+
+def discover_stage7(root: Path, manifests: dict[str, dict], inventory: Inventory, *,
+                    required: bool, note_revisions) -> dict:
+    """The canonical Stage 7 run is the complete extraction whose ``build-dataset`` published
+    the current ``data/processed/stage7/features.parquet`` on the current Stage 3/4 tables.
+    Other complete Stage 7 runs, prepared, failed or stale ones stay historical."""
+    expected = stage6_input_hashes(root)
+    published_dir = root / "data/processed/stage7"
+    published = published_dir / "features.parquet"
+    published_sha = file_hash(published) if published.is_file() else None
+    canonical: str | None = None
+    summary: dict = {}
+    for name, manifest in sorted(manifests.items()):
+        stage = manifest.get("stages", {}).get("stage7")
+        if not stage:
+            continue
+        features_stage = manifest.get("stages", {}).get("stage7_features") or {}
+        if stage.get("state") != "complete" or features_stage.get("state") != "complete":
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": f"stage7_state_{stage.get('state')}_features_"
+                                              f"{features_stage.get('state')}"}
+            continue
+        if expected is None or manifest.get("input_hashes") != expected:
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "input_hashes_differ_from_current_stage3_4"}
+            continue
+        run_features = manifest.get("output_hashes", {}).get("features/features.parquet")
+        if published_sha is None or run_features != published_sha:
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "did_not_publish_current_stage7_features"}
+            continue
+        if canonical is not None:
+            inventory.blockers.append(f"{name} and {canonical} both publish the current "
+                                      "Stage 7 feature table")
+            continue
+        run = root / "artifacts/runs" / name
+        try:
+            summary = stage7_run_summary(run)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            inventory.blockers.append(f"{name}: Stage 7 records invalid ({exc})")
+            continue
+        if sorted(stage.get("trajectories") or []) != summary["trajectories"] \
+                or summary["n_rows"] != stage.get("n_rows") \
+                or summary["n_units"] != stage.get("n_units"):
+            inventory.blockers.append(f"{name}: Stage 7 outputs differ from the prepared scope")
+            continue
+        canonical = name
+    if canonical is None:
+        if required:
+            inventory.blockers.append("No complete Stage 7 run publishes the current "
+                                      "data/processed/stage7/features.parquet on the current "
+                                      "Stage 3/4 tables")
+        return {"status": "absent"}
+    inventory.runs[canonical] = {"role": "stage7_production", "stage": "stage7"}
+    note_revisions(manifests[canonical])
+    counts = collect_run(root, canonical, "stage7_production", "stage7", inventory,
+                         required_stage=required, finalized=True,
+                         expected_units=set(summary["unit_keys"]))
+    if counts["valid_units"] != summary["n_units"]:
+        inventory.blockers.append(f"{canonical}: {summary['n_units'] - counts['valid_units']} "
+                                  "activation units are missing or invalid")
+    for name in STAGE7_PUBLISHED:
+        path = published_dir / name
+        payload = "parquet" if name.endswith(".parquet") else "sha256_sidecar"
+        for candidate, validation in ((path, payload),
+                                      (Path(str(path) + ".sha256"), "bytes")):
+            if not candidate.is_file():
+                inventory.blockers.append(f"data/processed/stage7/{candidate.name} is missing")
+                continue
+            inventory.add(Entry(f"data/processed/stage7/{candidate.name}", MUST_BACK_UP,
+                                "stage7", required, validation, run_id=canonical,
+                                size=candidate.stat().st_size))
+    superseded = published_dir / "superseded"
+    if superseded.is_dir():
+        inventory.exclude("data/processed/stage7/superseded", HISTORICAL_EVIDENCE,
+                          "relocated smoke publications; the run copies are protected")
+    return {"status": "complete", "run_id": canonical, "input_hashes": expected,
+            "published_features_sha256": published_sha, **summary}
 
 
 def highest_protected_stage(inventory: Inventory) -> int | None:

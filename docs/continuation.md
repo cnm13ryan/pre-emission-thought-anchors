@@ -324,3 +324,56 @@ uv run --frozen preanchor select --config configs/mvp.yaml --run-id <S8>
 uv run --frozen preanchor validate-probes --config configs/mvp.yaml --run-id <S8>
 ```
 Resume: `fit --config configs/mvp.yaml --resume --run-id <S8> --activation-run-id <S7>`.
+
+## Stage 7 operational closure (2026-09-15, branch `codex/stage7`)
+
+Stage 7 is finalized (`docs/stage7_validation.md`). `codex/stage6` (Stage 6 backup support
+and its verified MacBook copy) is merged into `codex/stage7` at `480031e`; Stage 7 backup
+support is `56aea1b`. Canonical Stage 7 state is in the portable store as bundle
+`20260915T191239Z-161f21fc4351fa8a064ee7a79d0750fa511b5d6afd71543930c5247ee8acc0e5`
+(canonical, protected through Stage 7, producer `56aea1b`, 4,791 objects, 3.61 GB logical,
+357 objects / 3.12 GB incremental over the verified Stage 6 store; restore-verified into
+`/home/ubuntu/preanchor-scratch-restore-stage7-b`). **State: Stage 7 portable bundle prepared
+and restore-verified; MacBook secondary verification pending.** The user runs, from the
+MacBook:
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage7 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 7 --no-prepare
+```
+
+Only `BACKUP VERIFIED` plus a `pull_verification` receipt for that bundle satisfies the
+Stage 7 backup gate. Two scratch restore roots (`…-stage7`, `…-stage7-b`, 3.6 GB each on the
+local disk) await the user's deletion approval. Stage 8 is not started; it needs the
+verified Stage 7 secondary copy and explicit authorisation. Stage 8 consumers read
+`data/processed/stage7/features.parquet` (primary features through
+`observables.PRIMARY_FEATURES`) and load activations one layer at a time through the
+table's `activation_run_id`/`shard_path`/`row_idx` pointers.
+
+## Control plane v0.1 (2026-09-15, branch `agent/ops/control-plane-v1-20260915-0bd79efc`)
+
+Base `f6ce263` (the `codex/stage7` closure). Adds `src/preanchor/control/` and the
+`preanchor agent ...` / `preanchor lease ...` commands documented in `docs/concurrency.md`;
+enforces `gpu:h100` in every model load, `gpu:h100`+`service:vllm` in
+`scripts/start_vllm.sh`, and `portable-store:writer` in `backup prepare` / `import-legacy`
+(auto-leased by the CLI, so the MacBook wrapper is unchanged). State lives under
+`$PREANCHOR_ROOT/control/` and is outside every scientific identity and every portable
+bundle. Validated with the CPU suites and a TEST-namespace drill on the real persistent
+root (transcript in `$PREANCHOR_ROOT/control/validation/`). From Stage 8 on: one agent
+session = one worker branch (`agent/stage8/<role>-<id>`) = one worktree; `codex/stage8` has
+one integrator. The branch is pushed for independent review and is not merged; it does
+not start Stage 8 and touches no Stage 3–7 artifact. At the time of writing a separate
+session was running a CPU-only Stage 8 `fit` from `/home/ubuntu/preanchor-stage8`
+(`codex/stage8`, `0d07354`); that worktree, branch and run were left alone.
+
+
+## Control plane v0.1 review and integration (2026-09-15)
+
+Independent review on `agent/ops/control-plane-review-20260915-e1d2bc32` (from `dde76ce`)
+fixed one normal-path GPU bypass (MiniLM scorers on `--device cuda`), the `__` name
+aliasing and the MacBook restore-push gap; see `docs/concurrency.md` ("Independent review
+record") and `docs/decisions.md`. Stage 8 had already completed on `codex/stage8`
+(`358945f`; canonical run `20260915T193326Z-57bcb41c84-7ebd0db6` at `0d07354`, clean
+tree) before the control plane existed; its outputs keep that identity and are not
+recomputed. Every new Stage 8/9 session registers with `preanchor agent register` and
+takes `gpu:h100` / `service:vllm` / `portable-store:writer` only when it actually uses the
+GPU, vLLM or the store; CPU-only fits need no lease.
