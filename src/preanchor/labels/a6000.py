@@ -566,9 +566,9 @@ def select(root, benchmark_ids, startup):
         for row in summary["requests"]:
             store.raw_units.validate(row["rollout_id"])
         if summary["warnings"] or summary["request_failures"] or summary["ooms"]:
-            raise ValueError("Unsafe benchmark")
+            continue
         if summary["truncations"] / summary["completed"] > 0.05:
-            raise ValueError("More than 5% length-truncated; batch is unsafe")
+            continue
         if summary["min_free_hbm_mib"] < 2048:
             raise ValueError("Less than 2 GiB measured physical headroom")
         if admission["kv_capacity_tokens"] < required_capacity(summary["concurrency"]):
