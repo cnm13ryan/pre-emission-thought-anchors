@@ -367,3 +367,24 @@ Stage 3/4 (working tree after `060f6c0`):
   latter satisfies the backup gate. The MacBook path and filesystem identity are
   provenance only and never enter scientific identity. Rejected alternative: treating
   the NFS bundle or the run manifest's `backup` field as verification.
+
+## Stage 6 operational closure (2026-09-15, commits `afd3714`..`128e1d3` on `codex/stage6`)
+
+- **fact:** Stage 6 is finalized at `542ee91`; Stage 7 has not started. The portable backup
+  implementation from `codex/mvp` was merged into `codex/stage6` (`afd3714`) so Stage 6
+  classification, tests and the real round trip live on one branch.
+- **choice:** Stage 6 canonical state is every complete Stage 6 run whose recorded inputs
+  are the current Stage 3/4 tables (`discover_stage6`), with activation units under
+  `activations/units` validated by `UnitStore`, and `STAGE_DEPENDENCIES[6] = (3, 4, 5)`
+  because the MVP continuation after Stage 6 needs the fresh pilot. Failed or prepared-only
+  runs and quarantine directories stay historical. Rejected alternative: promoting only the
+  SPEC smoke run and dropping the drill and envelope evidence, or bundling all runs by
+  directory name.
+- **fact:** bundle `20260915T180804Z-f4cd4b0b…` (152 new objects, 216 MB incremental over the
+  verified Stage 5 store) restored into an empty local-disk root and passed
+  `restore verify --for-stage 6`; the MacBook secondary verification is pending and is not
+  claimed. Physical origin/destination are recorded, never compared.
+- **fact:** the MacBook wrapper's remote checkout defaults to `~/preanchor-repo`
+  (`codex/mvp`, no Stage 6 support); the Stage 6 pull must set
+  `PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage6` (or the checkout containing
+  `128e1d3`). Rejected alternative: modifying `~/preanchor-repo` from this session.
