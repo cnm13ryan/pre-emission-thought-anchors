@@ -335,8 +335,10 @@ table's `activation_run_id`/`shard_path`/`row_idx` pointers.
 `preanchor fit`, `select`, `validate-probes` and `src/preanchor/probes/` implement SPEC
 Stage 8 (`docs/stage8_plan.md`, `docs/test_lock_protocol.md`). Validated on synthetic runs
 and the two-site real-data smoke `20260915T191139Z-30a5e56f6f-5c6fdbe6`. **Production is
-not run**: it waits for the Stage 7 MacBook `pull_verification` receipt (bundle for stage
-7) and explicit authorisation. Launch pattern:
+complete**: canonical run `20260915T193326Z-57bcb41c84-7ebd0db6` (`docs/stage8_validation.md`);
+`20260915T191905Z-a2bcc389c7-fc030488` is a superseded dirty-tree run. The Stage 7 and
+Stage 8 MacBook `pull_verification` receipts are still outstanding and gate Stage 9.
+Launch pattern used (logs must stay outside the worktree):
 
 ```bash
 tmux new-session -d -s stage8 'cd ~/preanchor-stage8 && set -a && . .env && set +a && \
