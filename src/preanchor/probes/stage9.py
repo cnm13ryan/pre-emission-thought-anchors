@@ -605,6 +605,37 @@ def test_state(run: Path, manifest: dict) -> dict:
             "freeze_sha256": None if stage is None else stage.get("freeze_sha256")}
 
 
+def _complete_from_receipt(run: Path, manifest: dict, freeze_sha: str) -> dict:
+    """Finalize a claimed evaluation whose receipt survived a crash before the manifest
+    revision. Every output must hash exactly as the receipt recorded; anything else refuses."""
+    receipt = read_json(run / RECEIPT_FILE)
+    if receipt.get("run_id") != run.name or receipt.get("stage") != TEST_STAGE:
+        raise TestLockError("The recovered receipt belongs to another run or stage")
+    if receipt.get("freeze_sha256") != freeze_sha:
+        raise TestLockError("The recovered receipt was written under a different freeze")
+    stage = manifest["stages"][TEST_STAGE]
+    if receipt.get("attempt") not in {a["attempt"] for a in stage.get("attempts", [])}:
+        raise TestLockError("The recovered receipt's attempt is not a recorded claim")
+    hashes = {"predictions/test.parquet": receipt.get("predictions_sha256"),
+              "metrics/test.json": receipt.get("metrics_sha256")}
+    for name, recorded in hashes.items():
+        path = run / name
+        if not path.is_file() or file_hash(path) != recorded:
+            raise TestLockError(f"Recovered output {name} is missing or does not hash as "
+                                "the receipt recorded; refusing")
+    receipt_sha = file_hash(run / RECEIPT_FILE)
+    manifest["output_hashes"].update({**hashes, RECEIPT_FILE: receipt_sha})
+    stage.update({"state": "complete", "n_rows": int(receipt["n_rows"]),
+                  "n_positive": int(receipt["n_positive"]),
+                  "n_problems": int(receipt["n_problems"]),
+                  "predictions_sha256": hashes["predictions/test.parquet"],
+                  "metrics_sha256": hashes["metrics/test.json"],
+                  "receipt_sha256": receipt_sha, "recovered_from_receipt": True})
+    save_manifest(run, manifest)
+    return {"metrics": read_json(run / "metrics" / "test.json"), "receipt": receipt,
+            "recovered": True}
+
+
 def evaluate_test(run: Path, repo: Path, config: ExperimentConfig, confirm: str) -> dict:
     root = run.parents[2]
     with lock(run / ".run.lock"):
@@ -616,15 +647,23 @@ def evaluate_test(run: Path, repo: Path, config: ExperimentConfig, confirm: str)
             raise TestLockError("--confirm-frozen is required")
         frozen, freeze_sha, handoff = verify_freeze(run, repo, config, manifest, confirm)
         state = test_state(run, manifest)
-        if state["receipt"] or state["state"] == "complete":
+        if state["state"] == "complete":
             raise TestLockError("The held-out test was already evaluated for this run; a new "
                                 "selection needs a new run_id")
+        if state["receipt"] and not state["claimed"]:
+            raise TestLockError("A test receipt exists without a recorded claim; refusing")
         if any(state["outputs"].values()) and not state["claimed"]:
             raise TestLockError("Test outputs exist without a recorded claim; refusing")
         if state["claimed"] and state["freeze_sha256"] != freeze_sha:
             raise TestLockError("A previous attempt was claimed under a different freeze")
         if state["claimed"] and state["state"] not in ("claimed", "failed"):
             raise TestLockError(f"Unexpected test state {state['state']}")
+        if state["receipt"]:
+            # The receipt is the commit point: a crash after it was durably written but
+            # before the manifest revision leaves state "claimed" with a receipt on disk.
+            # That is the one evaluation, already published — finalize the manifest from
+            # the receipt instead of refusing the run forever or evaluating again.
+            return _complete_from_receipt(run, manifest, freeze_sha)
         attempt = uuid.uuid4().hex
         started = time.monotonic()
         attempts = state["attempts"] + [{"attempt": attempt, "claimed_at": utc_now(),

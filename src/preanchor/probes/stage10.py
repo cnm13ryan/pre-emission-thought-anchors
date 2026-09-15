@@ -640,26 +640,34 @@ class Context:
         for s in EVAL_SPLITS:
             if self.frozen_meta[s][PRIMARY_MODEL] != self.meta[PRIMARY_MODEL]:
                 raise ValueError("Frozen predictions were not produced by the frozen primary")
-        self._sites: dict[str, np.ndarray] = {}
+        self._sites: dict[tuple[str, int], np.ndarray] = {}
         self._lead: dict[str, tuple] = {}
+        self._lead_sites: dict[tuple[str, int], np.ndarray] = {}
 
-    def site(self, split: str) -> np.ndarray:
-        """The frozen selected site for the eligible rows of ``split`` (float32)."""
-        if split not in self._sites:
+    def site(self, split: str, layer: int | None = None) -> np.ndarray:
+        """The frozen site of ``layer`` (default: the primary model's frozen layer) for the
+        eligible rows of ``split`` (float32). Cached per (split, layer): each activation
+        family must be fitted and scored at its own frozen layer, not the primary's."""
+        key = (split, self.layer if layer is None else int(layer))
+        if key not in self._sites:
             loader = ActivationLoader(self.activation_run, self.rows[split].partition, self.config)
-            self._sites[split] = loader.site(self.layer)
+            self._sites[key] = loader.site(key[1])
             del loader
-        return self._sites[split]
+        return self._sites[key]
 
-    def lead(self, split: str) -> tuple[np.ndarray, Partition, list[dict], np.ndarray]:
-        """``(available, source_partition, mapping, source_site)`` for lead one."""
+    def lead(self, split: str, layer: int | None = None) \
+            -> tuple[np.ndarray, Partition, list[dict], np.ndarray]:
+        """``(available, source_partition, mapping, source_site)`` for lead one, with the
+        source site at ``layer`` (default: the primary model's frozen layer)."""
         if split not in self._lead:
-            available, source, mapping = lead_one_source(self.rows[split], self.table_by_id)
+            self._lead[split] = lead_one_source(self.rows[split], self.table_by_id)
+        available, source, mapping = self._lead[split]
+        key = (split, self.layer if layer is None else int(layer))
+        if key not in self._lead_sites:
             loader = ActivationLoader(self.activation_run, source, self.config)
-            site = loader.site(self.layer)
+            self._lead_sites[key] = loader.site(key[1])
             del loader
-            self._lead[split] = (available, source, mapping, site)
-        return self._lead[split]
+        return available, source, mapping, self._lead_sites[key]
 
     def scores(self, family: str, pipeline, split: str, partition: Partition,
                site: np.ndarray | None) -> dict:
@@ -670,18 +678,21 @@ class Context:
 # --------------------------------------------------------------------------- analyses
 
 
-def _refit_all(ctx: Context, train: Partition, train_site: np.ndarray, y=None) -> dict:
+def _refit_all(ctx: Context, train: Partition, site_for, y=None) -> dict:
+    """``site_for(layer)`` returns the training activation matrix at that layer, so each
+    activation family is refitted at its own frozen layer."""
     fitted = {}
     for family in REFIT_FAMILIES:
-        site = train_site if M.uses_activation(family) else None
+        site = site_for(ctx.meta[family]["layer"]) if M.uses_activation(family) else None
         fitted[family] = refit_family(family, ctx.meta[family], train, site, ctx.config, y)
     return fitted
 
 
 def _score_all(ctx: Context, fitted: dict, split: str, partition: Partition,
-               site: np.ndarray) -> dict:
+               site_for) -> dict:
     return {family: ctx.scores(family, pipeline, split, partition,
-                               site if M.uses_activation(family) else None)
+                               site_for(ctx.meta[family]["layer"])
+                               if M.uses_activation(family) else None)
             for family, pipeline in fitted.items()}
 
 
@@ -695,7 +706,7 @@ def analysis_threshold(ctx: Context, variant: str) -> list[dict]:
               "train_n_rows": int(len(train)), "train_n_positive": int(train.y.sum()),
               "train_prevalence": float(train.y.mean()),
               "equals_frozen_primary": bool(threshold == ctx.stage9["frozen"]["anchor_threshold"])}
-    fitted = _refit_all(ctx, train, ctx.site("train"))
+    fitted = _refit_all(ctx, train, lambda ly: ctx.site("train", ly))
     rows = []
     for split in EVAL_SPLITS:
         part = relabel(ctx.rows[split].partition, threshold)
@@ -704,7 +715,8 @@ def analysis_threshold(ctx: Context, variant: str) -> list[dict]:
                                meta=ctx.frozen_meta[split], config=ctx.config, detail=detail)
         rows += evaluate_group(analysis="threshold", variant=variant, split=split, source=REFIT,
                                partition=part,
-                               binary=_score_all(ctx, fitted, split, part, ctx.site(split)),
+                               binary=_score_all(ctx, fitted, split, part,
+                                                 lambda ly, s=split: ctx.site(s, ly)),
                                meta=ctx.meta, config=ctx.config, detail=detail)
     return rows
 
@@ -720,7 +732,8 @@ def analysis_convergence(ctx: Context, variant: str) -> list[dict]:
               "rows_gained_vs_k5": {s: 0 for s in masks},
               "anchor_threshold": "frozen_q90_unchanged"}
     train = take(ctx.rows["train"].partition, np.flatnonzero(masks["train"]))
-    fitted = _refit_all(ctx, train, ctx.site("train")[masks["train"]])
+    fitted = _refit_all(ctx, train,
+                        lambda ly: ctx.site("train", ly)[masks["train"]])
     rows = []
     for split in EVAL_SPLITS:
         idx = np.flatnonzero(masks[split])
@@ -733,7 +746,8 @@ def analysis_convergence(ctx: Context, variant: str) -> list[dict]:
                                meta=ctx.frozen_meta[split], config=ctx.config, detail=detail)
         rows += evaluate_group(analysis="convergence", variant=variant, split=split,
                                source=REFIT, partition=part,
-                               binary=_score_all(ctx, fitted, split, part, ctx.site(split)[idx]),
+                               binary=_score_all(ctx, fitted, split, part,
+                                                 lambda ly, s=split, i=idx: ctx.site(s, ly)[i]),
                                meta=ctx.meta, config=ctx.config, detail=detail)
     return rows
 
@@ -753,7 +767,7 @@ def analysis_replacement(ctx: Context, variant: str) -> list[dict]:
     if keep:
         mask = supported["train"][0]
         train = take(ctx.rows["train"].partition, np.flatnonzero(mask))
-        fitted = _refit_all(ctx, train, ctx.site("train")[mask])
+        fitted = _refit_all(ctx, train, lambda ly, m=mask: ctx.site("train", ly)[m])
     for split in EVAL_SPLITS:
         mask = supported[split][0] if keep else ~supported[split][0]
         idx = np.flatnonzero(mask)
@@ -766,7 +780,8 @@ def analysis_replacement(ctx: Context, variant: str) -> list[dict]:
             rows += evaluate_group(analysis="replacement_quality", variant=variant, split=split,
                                    source=REFIT, partition=part,
                                    binary=_score_all(ctx, fitted, split, part,
-                                                     ctx.site(split)[idx]),
+                                                     lambda ly, s=split, i=idx:
+                                                     ctx.site(s, ly)[i]),
                                    meta=ctx.meta, config=ctx.config, detail=detail)
     return rows
 
@@ -810,15 +825,15 @@ def analysis_quintile(ctx: Context, which: str, variant: str) -> list[dict]:
 def analysis_lead_time(ctx: Context) -> tuple[list[dict], pa.Table, dict]:
     """Lead one at the frozen site: refit on lead-one training rows, evaluate on the mappable
     validation/test rows, paired with the frozen lead-zero scores on the same rows."""
-    avail_tr, source_tr, mapping_tr, site_tr = ctx.lead("train")
+    avail_tr, source_tr, mapping_tr, _ = ctx.lead("train")
     target_tr = take(ctx.rows["train"].partition, np.flatnonzero(avail_tr))
-    fitted = _refit_all(ctx, source_tr, site_tr, y=target_tr.y)
+    fitted = _refit_all(ctx, source_tr, lambda ly: ctx.lead("train", ly)[3], y=target_tr.y)
     rows, preds = [], []
     summary = {"layer": ctx.layer, "families": list(REFIT_FAMILIES), "unavailable": {},
                "available": {}, "train_rows": int(avail_tr.sum()),
                "train_unavailable": int((~avail_tr).sum())}
     for split in EVAL_SPLITS:
-        available, source, mapping, site = ctx.lead(split)
+        available, source, mapping, _ = ctx.lead(split)
         idx = np.flatnonzero(available)
         target = take(ctx.rows[split].partition, idx)
         if source.sentence_id != [m["feature_sentence_id"] for m in mapping if m["available"]]:
@@ -829,7 +844,7 @@ def analysis_lead_time(ctx: Context) -> tuple[list[dict], pa.Table, dict]:
                   "S_(i-1); label of S_i", "n_unavailable": int((~available).sum()),
                   "unavailable_reasons": sorted({m["unavailable_reason"] for m in mapping
                                                  if not m["available"]})}
-        scored = _score_all(ctx, fitted, split, source, site)
+        scored = _score_all(ctx, fitted, split, source, lambda ly, s=split: ctx.lead(s, ly)[3])
         rows += evaluate_group(analysis="lead_time", variant="lead1_refit", split=split,
                                source=REFIT, partition=target, binary=scored, meta=ctx.meta,
                                config=ctx.config, lead=1, detail=detail)
