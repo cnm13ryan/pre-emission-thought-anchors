@@ -49,8 +49,10 @@ def synthetic_corpus(config) -> tuple[list[dict], list[dict], list[dict]]:
             body = [f"Okay, so {problem} is {kind}.", "Let me see.", "So x = 2.",
                     "Wait, check that.", "Hmm, maybe 3.", "Yes, 3 works.", "Therefore 3.",
                     "But also 4?", "No, 3.", "Let me verify again.", "Fine.", "Done now.",
-                    "Actually not.", "Recheck.", "Alright.", "So the answer is 3.",
-                    "Final: \\boxed{3}."]
+                    "Actually not.", "Recheck.", "Alright.", "So the answer is 3."]
+            if tid == "4682:correct":   # every frozen Stage 5 fork (up to 47) needs a boundary
+                body += [f"Step {i} holds." for i in range(16, 47)]
+            body.append("Final: \\boxed{3}.")
             trace, spans = prompt, []
             for i, s in enumerate(body):
                 if i:

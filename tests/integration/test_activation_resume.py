@@ -67,7 +67,7 @@ def test_complete_resume_and_validation(prepared):
     assert "first_target_token_logprob" not in {
         c for c in features[0] if not c.startswith("diagnostic__")}
     projection = read_json(run / "stages/stage6/resource_projection.json")
-    assert projection["unit_count"] == 40 and projection["row_count"] == 40 * 17
+    assert projection["unit_count"] == 40 and projection["row_count"] == 39 * 17 + 48
     before = unit_state(run)
     with pytest.raises(ValueError, match="requires --resume"):
         execute(run, ROOT, config, trajectories=["330:correct", "2189:incorrect"],

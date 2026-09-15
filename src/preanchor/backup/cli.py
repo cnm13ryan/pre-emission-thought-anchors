@@ -76,6 +76,9 @@ def render_plan(summary: dict) -> str:
         if stage == "stage5" and info.get("status") != "absent":
             extra = (f" run={info.get('run_id')} units={info.get('protected_completed_units')}/"
                      f"{info.get('planned_units')} resumable={info.get('resumable')}")
+        if stage == "stage6" and info.get("status") != "absent":
+            extra = (f" runs={len(info.get('run_ids') or [])} units={info.get('total_units')} "
+                     f"rows={info.get('total_rows')}")
         lines.append(f"  {stage}: {info.get('status')}{extra}")
     lines.append("Classification:")
     for name, row in summary["classification"].items():
