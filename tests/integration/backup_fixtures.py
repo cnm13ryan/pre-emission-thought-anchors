@@ -156,3 +156,37 @@ def make_stage6_world(root: Path, monkeypatch, *, stage5_units: int = 256, **kwa
     production, specs = make_production(root, units=stage5_units)
     stage6 = make_stage6(root, **kwargs)
     return production, specs, stage6
+
+
+def make_stage7(root: Path) -> Path:
+    """A complete Stage 7 run (tiny Qwen2, all 40 synthetic trajectories, mvp configuration)
+    with ``build-dataset`` published to ``data/processed/stage7`` and ``validate-features``
+    recorded, laid out exactly as ``features.extract`` and ``features.dataset`` write it."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tests/fixtures"))
+    from tiny_qwen2 import tiny_loader, tiny_model, tiny_tokenizer
+
+    from preanchor.features.dataset import build_dataset, validate_features
+    from preanchor.features.extract import execute, load_inputs, prepare, select_work
+    from preanchor.features.observables import head_from_model
+
+    config = load_config(ROOT / "configs/mvp.yaml")
+    inputs, hashes = load_inputs(root)
+    run = prepare(root, ROOT, config, "fixture", select_work(config, inputs, None, None), hashes)
+    execute(run, ROOT, config, tracking=False, loader=tiny_loader, diagnostics=False)
+    head_loader = lambda cfg, device: head_from_model(tiny_model(), device)  # noqa: E731
+    tokenizer_loader = lambda cfg: tiny_tokenizer()  # noqa: E731
+    build_dataset(run, ROOT, config, root, device="cpu", tracking=False,
+                  head_loader=head_loader, tokenizer_loader=tokenizer_loader)
+    validate_features(run, config, root, sample=0)
+    return run
+
+
+def make_stage7_world(root: Path, monkeypatch, *, stage5_units: int = 2, **kwargs):
+    """The full ``--for-stage 7`` closure without GPU or network: Stage 3/4 synthetic tables
+    and runs, a Stage 5 production run, a Stage 6 smoke run and the canonical Stage 7 run."""
+    production, specs, stage6 = make_stage6_world(root, monkeypatch, stage5_units=stage5_units,
+                                                  **kwargs)
+    stage7 = make_stage7(root)
+    return production, specs, stage6, stage7
