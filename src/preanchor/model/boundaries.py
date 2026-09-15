@@ -30,8 +30,10 @@ def tokenize_trace(tokenizer, full_cot: str) -> tuple[list[int], list[tuple[int,
     offsets = [(int(a), int(b)) for a, b in encoded["offset_mapping"]]
     if tokenizer.decode(ids) != full_cot:
         raise ValueError("Tokenisation does not round-trip the stored trace")
-    for (a, b), (c, _) in zip(offsets, offsets[1:], strict=False):
-        if a > b or b > c:
+    # Byte-level BPE can emit several tokens for one multi-byte character; their spans
+    # coincide, so only non-decreasing starts and ends are required.
+    for (a, b), (c, d) in zip(offsets, offsets[1:], strict=False):
+        if a > b or c < a or d < b:
             raise ValueError("Offset mapping is not monotone")
     return ids, offsets
 
