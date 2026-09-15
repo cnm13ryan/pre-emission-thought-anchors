@@ -27,25 +27,42 @@ LIMIT = 8
 ANCHORS = {1, 3, 5}
 
 
-def relabel(root: Path) -> None:
+def relabel(root: Path, *, train_quantile_threshold: bool = False) -> None:
+    """Default: anchors at ``ANCHORS`` with the synthetic 0.5 threshold. With
+    ``train_quantile_threshold`` the anchors share importance 1.0, the threshold column is
+    the exact train-only q90 (which is 1.0), ``anchor`` follows it, and ``eligible_k4`` drops
+    the last eligible sentence so the K=4 sensitivity differs (Stage 10 lineage)."""
     path = root / "data/processed/stage4/labels.parquet"
     table = validate_parquet(path)
     rows = table.to_pylist()
     for r in rows:
         r["anchor"] = r["sentence_idx"] in ANCHORS
-        # Non-anchors stay below the 0.5 synthetic threshold for every eligible index.
-        r["importance_primary"] = 0.02 * r["sentence_idx"] + (1.0 if r["anchor"] else 0.0)
+        if train_quantile_threshold:
+            r["importance_primary"] = 1.0 if r["anchor"] else 0.02 * r["sentence_idx"]
+            r["eligible_k4"] = bool(r["eligible"] and r["sentence_idx"] < LIMIT - 1)
+        else:
+            # Non-anchors stay below the 0.5 synthetic threshold for every eligible index.
+            r["importance_primary"] = 0.02 * r["sentence_idx"] + (1.0 if r["anchor"] else 0.0)
         r["importance_log1p"] = math.log1p(r["importance_primary"])
+    if train_quantile_threshold:
+        from preanchor.labels.threshold import train_threshold
+
+        threshold = train_threshold([r for r in rows if r["sentence_idx"] < LIMIT], set(TRAIN),
+                                    0.90)
+        for r in rows:
+            r["anchor_threshold"] = threshold
+            r["anchor"] = bool(r["importance_primary"] >= threshold)
     for suffix in ("", ".sha256", ".schema.json", ".schema.json.sha256"):
         Path(str(path) + suffix).unlink()
     write_parquet(path, pa.Table.from_pylist(rows, schema=table.schema))
 
 
-def build_lineage(base: Path, repo: Path, config, *, problems=None) -> tuple[Path, Path, Path]:
+def build_lineage(base: Path, repo: Path, config, *, problems=None,
+                  train_quantile_threshold: bool = False) -> tuple[Path, Path, Path]:
     """Returns ``(root, stage7_run, stage8_run)``; Stage 8 is selected and validated."""
     root = base / "root"
     write_synthetic_root(root, config)
-    relabel(root)
+    relabel(root, train_quantile_threshold=train_quantile_threshold)
     work = [f"{p}:{k}" for p in (problems or TRAIN + VALIDATION + TEST)
             for k in ("correct", "incorrect")]
     inputs, hashes = load_inputs(root)

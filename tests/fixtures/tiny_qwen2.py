@@ -82,7 +82,10 @@ def synthetic_corpus(config) -> tuple[list[dict], list[dict], list[dict]]:
                                "importance_legacy": 0.1, "importance_canonical": 0.1,
                                "label_source": "canonical_fallback", "importance_log1p": 0.09,
                                "eligible_k4": i < 12, "anchor_threshold": 0.5,
-                               "anchor": i == 3})
+                               "anchor": i == 3,
+                               # Released-rollout support counts (Stage 10 replacement filter).
+                               "sample_count": 100,
+                               "dissimilar_count": (13 * i + problem) % 101})
     return trajectories, sentences, labels
 
 

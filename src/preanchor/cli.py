@@ -754,6 +754,62 @@ def validate_evaluation_command(
         raise typer.Exit(1)
 
 
+@app.command("run-sensitivities")
+def run_sensitivities_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    stage9_run_id: Annotated[str | None, typer.Option(
+        help="Frozen, test-evaluated Stage 9 run (default: the single such run).")] = None,
+    run_id: Annotated[str | None, typer.Option(help="Existing Stage 10 run to resume.")] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    workers: Annotated[int | None, typer.Option(min=1, max=8)] = None,
+) -> None:
+    """SPEC Stage 10: threshold/convergence/replacement sensitivities, correct-incorrect
+    subgroups, position and entropy quintiles, lead one at the frozen site, 100 stratified
+    label permutations and paired baseline differences, all from stored artifacts. CPU only;
+    never modifies the Stage 9 run or the frozen selection."""
+    from preanchor.probes.stage10 import discover_stage9, execute, prepare_run
+
+    if resume != (run_id is not None):
+        raise typer.BadParameter("--resume requires --run-id and vice versa")
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    if run_id:
+        run = run_path(run_id)
+    else:
+        stage9 = run_path(stage9_run_id) if stage9_run_id else discover_stage9(root)
+        run = prepare_run(root, repo, loaded, stage9)
+    summary = execute(run, repo, loaded, resume=resume, workers=workers)
+    typer.echo(json.dumps(redact({
+        "run_id": run.name, "stage9_run_id": summary["stage9_run_id"],
+        "freeze_sha256": summary["freeze_sha256"], "train_thresholds": summary["train_thresholds"],
+        "units": len(summary["units"]), "output_hashes": summary["output_hashes"],
+        "permutations": summary["records"]["permutations"]["splits"],
+        "lead_unavailable": summary["records"]["lead_time"]["unavailable"],
+        "elapsed_seconds": summary["elapsed_seconds"]}), sort_keys=True))
+
+
+@app.command("validate-sensitivities")
+def validate_sensitivities_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """Re-check a Stage 10 run: Stage 9 inputs unchanged, train-only thresholds with q90 equal
+    to the freeze, frozen-site-only models, lead-one mapping, permutation count/seeds/strata,
+    explicit undefined groups, no Stage 11 artifact."""
+    from preanchor.probes.stage10 import validate_stage10
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    report = validate_stage10(run_path(run_id), repo, loaded)
+    typer.echo(json.dumps(redact(report), sort_keys=True))
+    if not report["ok"]:
+        raise typer.Exit(1)
+
+
 @app.command("validate-activations")
 def validate_activations_command(
     run_id: Annotated[str, typer.Option()],

@@ -66,8 +66,11 @@ def world(tmp_path_factory):
 
 
 @pytest.fixture
-def provenance(monkeypatch):
+def provenance(world, monkeypatch):
+    from backup_fixtures import grant_writer_lease
+
     fake_provenance(monkeypatch)
+    grant_writer_lease(world[0], monkeypatch)   # prepare() mutates the store: lease it
 
 
 def test_stage9_closure_classification_and_identity(world, provenance):
