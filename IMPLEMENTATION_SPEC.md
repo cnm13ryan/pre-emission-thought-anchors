@@ -1367,11 +1367,18 @@ Checks:
 * Every target character belongs to `target_token_start` or later.
 * Every prefix token ends no later than the target boundary.
 * Prefix token IDs equal the full-trace token-ID prefix exactly.
-* Full-sequence causal replay and truncated-prefix replay produce matching boundary states within:
+* **Primary causal-invariance gate (amended 2026-09-15, `artifacts/amendments/20260915T170000Z.md`):**
+  keeping the prefix, the boundary and the sequence length fixed, replacing every token
+  strictly after the boundary and replaying the same-length sequence leaves the captured
+  boundary state unchanged at every site within:
 
-  * BF16 absolute tolerance `2e-2`;
+  * BF16 absolute tolerance `2e-2` (bitwise equality is the observed behaviour);
   * float32 test-model tolerance `1e-5`.
-* Mutating every target and future token ID leaves the boundary activation unchanged.
+* **Diagnostic, never an admission gate:** full-sequence replay versus truncated-prefix
+  replay. GPU BF16 kernels round differently for short sequence shapes (measured on the
+  H100: prefixes of 70 and 86 tokens differ by up to 4.5 absolute at layer 48 while prefixes
+  of 112+ tokens are bitwise identical and the same-shape mutation is exactly zero). Record
+  per-boundary, per-site maximum differences in `invariance_report.json`.
 * The extractor rejects `boundary_token_idx < 0`.
 * Actual first-target-token probability is absent from primary feature columns.
 
@@ -1825,8 +1832,8 @@ artifacts/.../figures/4682_fresh_importance.*
 
 * Load exact BF16 model.
 * Extract 16 boundaries from one short trajectory.
-* Compare full-trace and prefix-only activations.
-* Verify future-token mutation invariance.
+* Verify same-shape future-token mutation invariance (primary gate, §10.2).
+* Compare full-trace and truncated-prefix activations (diagnostic, §10.2).
 * Compute observable logit features.
 
 **Commands**
@@ -1850,7 +1857,7 @@ uv run pytest -q \
 
 **Failure/recovery**
 
-* Full/prefix mismatch: inspect BOS/special-token behavior, hook site and causal mask. Halt; do not loosen tolerance to pass.
+* Same-shape mutation mismatch: inspect BOS/special-token behavior, hook site and causal mask. Halt; do not loosen tolerance to pass. A truncated-prefix discrepancy with an exact same-shape result is recorded as sequence-length-dependent BF16 rounding, not leakage.
 * GPU OOM: confirm `use_cache=False`, no complete hidden-state retention and batch size one.
 * Unsupported SDPA kernel: use PyTorch eager attention only for the failing smoke trace and estimate memory before full execution.
 

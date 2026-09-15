@@ -6,7 +6,9 @@ from typing import Annotated
 
 import typer
 
+from preanchor.backup.cli import backup_app, restore_app
 from preanchor.config import Settings, load_config
+from preanchor.control.cli import agent_app, lease_app
 from preanchor.doctor import run_doctor
 from preanchor.logging import configure_logging, redact
 from preanchor.manifest import create_run, load_manifest
@@ -15,6 +17,10 @@ from preanchor.smoke import run_smoke
 from preanchor.storage import persistent_mount
 
 app = typer.Typer(no_args_is_help=True, help="Passive offline thought-anchor experiment.")
+app.add_typer(backup_app, name="backup")
+app.add_typer(restore_app, name="restore")
+app.add_typer(agent_app, name="agent")
+app.add_typer(lease_app, name="lease")
 
 
 @app.callback()
@@ -474,3 +480,342 @@ def config_hash_of(value: dict) -> str:
 
 if __name__ == "__main__":
     app()
+
+
+@app.command("extract-activations")
+def extract_activations_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/smoke.yaml"),
+    trajectory: Annotated[list[str] | None, typer.Option(
+        help="Trajectory id such as 330:correct; repeatable.")] = None,
+    limit_sentences: Annotated[int | None, typer.Option("--limit-sentences", min=1)] = None,
+    run_id: Annotated[str | None, typer.Option()] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    pause_seconds: Annotated[float, typer.Option(min=0, max=60,
+                                                 help="Interruption drills only.")] = 0.0,
+) -> None:
+    """Replay trajectories once and store boundary activations as resumable units.
+
+    Without ``--run-id`` a new run is prepared from the current commit and executed.
+    ``--resume --run-id ID`` validates completed units and reruns only missing work.
+    SPEC Stage 7 (all 40 trajectories under configs/mvp.yaml) needs separate authorisation.
+    """
+    from preanchor.features.extract import execute, load_inputs, prepare, select_work
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    if run_id is None:
+        if resume:
+            raise typer.BadParameter("--resume requires --run-id")
+        inputs, hashes = load_inputs(root)
+        work = select_work(loaded, inputs, trajectory, limit_sentences)
+        command = (f"preanchor extract-activations --config {config}"
+                   + "".join(f" --trajectory {t}" for t in trajectory or [])
+                   + (f" --limit-sentences {limit_sentences}" if limit_sentences else ""))
+        directory = prepare(root, repo, loaded, command, work, hashes)
+    else:
+        if not resume:
+            raise typer.BadParameter("--run-id requires --resume")
+        directory = run_path(run_id)
+    result = execute(directory, repo, loaded, trajectories=trajectory,
+                     limit_sentences=limit_sentences, resume=resume, pause_seconds=pause_seconds)
+    typer.echo(json.dumps(redact({"run_id": directory.name, "created": result["created"],
+                                  "skipped": result["skipped"],
+                                  "n_rows": result["summary"]["n_rows"],
+                                  "diagnostics": result.get("diagnostics")}), sort_keys=True))
+
+
+@app.command("build-dataset")
+def build_dataset_command(
+    run_id: Annotated[str, typer.Option(help="Completed extract-activations run.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    device: Annotated[str | None, typer.Option(
+        help="Device for the float32 norm+lm_head statistics; default cuda:0 if available.")]
+    = None,
+    publish: Annotated[bool | None, typer.Option(
+        help="Publish to data/processed/stage7; default: only for execution mode mvp.")]
+    = None,
+) -> None:
+    """SPEC Stage 7: strict observables joined to Stage 4 labels by sentence_id.
+
+    Reads the run's validated activation shards, tokenises each stored trace once, computes
+    the SPEC §3.9 observables in float32 from stored layer-48 boundary states and writes
+    features/features.parquet plus feature_audit.json; publishes to
+    data/processed/stage7/features.parquet.
+    """
+    from preanchor.features.dataset import build_dataset
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    result = build_dataset(run_path(run_id), repo, loaded, root, device=device, publish=publish)
+    audit = result["audit"]
+    typer.echo(json.dumps(redact({"run_id": run_id, "n_rows": result["n_rows"],
+                                  "features_sha256": result["features_sha256"],
+                                  "device": audit["device"], "units": audit["units"],
+                                  "eligible_rows": audit["eligible_rows"],
+                                  "anchor_rows": audit["anchor_rows"],
+                                  "published": audit["published"],
+                                  "superseded_publication":
+                                      audit.get("superseded_publication")}), sort_keys=True))
+
+
+@app.command("validate-features")
+def validate_features_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    sample: Annotated[int, typer.Option(min=0, help="Rows recomputed from shards.")] = 64,
+    device: Annotated[str | None, typer.Option()] = None,
+) -> None:
+    """Re-validate the Stage 7 feature table: coverage, joins, allow-list, invariants,
+    published-copy identity and an exact recomputation of a seeded row sample."""
+    from preanchor.features.dataset import validate_features
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    report = validate_features(run_path(run_id), loaded, root, sample=sample, device=device)
+    typer.echo(json.dumps(redact({k: report[k] for k in (
+        "ok", "run_id", "rows", "units", "features_sha256", "published_identical",
+        "recomputed", "split_rows", "eligible_rows", "anchor_rows")}), sort_keys=True))
+
+
+@app.command("fit")
+def fit_command(
+    activation_run_id: Annotated[str, typer.Option(
+        help="Completed Stage 7 run whose feature table is published.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    partition: Annotated[str, typer.Option(help="Only 'train' is permitted.")] = "train",
+    run_id: Annotated[str | None, typer.Option(help="Existing Stage 8 run to resume.")] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    workers: Annotated[int | None, typer.Option(min=1, max=8)] = None,
+    limit_sites: Annotated[int | None, typer.Option(
+        min=1, help="Smoke configurations only: fit the first N sites.")] = None,
+) -> None:
+    """SPEC Stage 8: baselines and per-site probes under grouped four-fold CV on training
+    problems only; resumable at (model, site) granularity. CPU only."""
+    from preanchor.probes.fit import PARTITION, execute, prepare_run
+
+    if partition != PARTITION:
+        raise typer.BadParameter("Stage 8 fits on the training partition only")
+    if resume != (run_id is not None):
+        raise typer.BadParameter("--resume requires --run-id and vice versa")
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    activation_run = run_path(activation_run_id)
+    run = run_path(run_id) if run_id else prepare_run(root, repo, loaded, activation_run, "fit")
+    summary = execute(run, repo, loaded, resume=resume, workers=workers,
+                      limit_sites=limit_sites)
+    typer.echo(json.dumps(redact({"run_id": run.name, "n_rows": summary["n_rows"],
+                                  "n_positive": summary["n_positive"],
+                                  "units": len(summary["units"]),
+                                  "cv_results_sha256": summary["cv_results_sha256"],
+                                  "elapsed_seconds": summary["elapsed_seconds"]}),
+                          sort_keys=True))
+
+
+@app.command("select")
+def select_command(
+    run_id: Annotated[str, typer.Option(help="Stage 8 run with a complete fit.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    workers: Annotated[int | None, typer.Option(min=1, max=8)] = None,
+) -> None:
+    """Select layer and regularisation from training CV, fit the residualised control at the
+    selected site, refit on all training rows and write frozen_selection.pending.json."""
+    from preanchor.probes.select import execute
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    pending = execute(run_path(run_id), repo, loaded, workers=workers)
+    typer.echo(json.dumps(redact({"run_id": run_id, "binary": pending["binary"],
+                                  "continuous": pending["continuous"],
+                                  "selected_model_sha256": pending["selected_model_sha256"]}),
+                          sort_keys=True))
+
+
+@app.command("validate-probes")
+def validate_probes_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """Re-validate a Stage 8 run: units, coverage, train-only rows, recomputed metrics,
+    selection reproducibility and model serialisation."""
+    from preanchor.probes.validate import validate_probes
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    report = validate_probes(run_path(run_id), loaded, root)
+    typer.echo(json.dumps(redact({k: report[k] for k in (
+        "ok", "run_id", "rows", "units", "sites", "cv_rows", "prediction_rows",
+        "max_ap_recompute_diff", "selected")}), sort_keys=True))
+
+
+@app.command("calibrate")
+def calibrate_command(
+    probe_run_id: Annotated[str, typer.Option(
+        help="Finalized Stage 8 run (fit, select and validate-probes complete).")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """SPEC Stage 9 step 1-3: create the Stage 9 run, score the validation partition with
+    the Stage 8 selection, fit (or explicitly skip) the validation-only Platt calibrator and
+    write the validation diagnostics. Never reads a test row. CPU only."""
+    from preanchor.probes.stage9 import calibrate, prepare_run
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    run = prepare_run(root, repo, loaded, run_path(probe_run_id))
+    result = calibrate(run, repo, loaded)
+    cal, part = result["calibrator"], result["metrics"]["partition"]
+    typer.echo(json.dumps(redact({
+        "run_id": run.name, "n_rows": part["n_rows"], "n_positive": part["n_positive"],
+        "calibration_fitted": cal["fitted"], "skip_reason": cal["skip_reason"],
+        "primary_validation_average_precision": result["metrics"]["primary"]["value"],
+        "predictions_sha256": result["predictions_sha256"],
+        "metrics_sha256": result["metrics_sha256"]}), sort_keys=True))
+
+
+@app.command("freeze-selection")
+def freeze_selection_command(
+    run_id: Annotated[str, typer.Option(help="Stage 9 run with a complete calibration.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """SPEC Stage 9 step 4-5: write metrics/analysis_registry.json and the immutable
+    frozen_selection.json; prints the exact SHA-256 that evaluate-test requires."""
+    from preanchor.probes.stage9 import freeze
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    result = freeze(run_path(run_id), repo, loaded)
+    typer.echo(json.dumps(redact({
+        "run_id": run_id, "freeze_sha256": result["freeze_sha256"],
+        "analysis_registry_sha256": result["analysis_registry_sha256"],
+        "binary": result["frozen"]["binary"], "continuous": result["frozen"]["continuous"],
+        "anchor_threshold": result["frozen"]["anchor_threshold"],
+        "calibration_fitted": result["frozen"]["calibration"]["fitted"]}), sort_keys=True))
+
+
+@app.command("evaluate-test")
+def evaluate_test_command(
+    run_id: Annotated[str, typer.Option(help="Frozen Stage 9 run.")],
+    confirm_frozen: Annotated[str, typer.Option(
+        help="Exact SHA-256 of frozen_selection.json; anything else fails closed.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """SPEC Stage 9 step 6: the single held-out test evaluation. Refuses to run before the
+    freeze, with a wrong hash, after any post-freeze change, or a second time."""
+    from preanchor.probes.stage9 import TestLockError, evaluate_test
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    try:
+        result = evaluate_test(run_path(run_id), repo, loaded, confirm_frozen)
+    except TestLockError as exc:
+        typer.echo(json.dumps({"ok": False, "refused": str(exc)}))
+        raise typer.Exit(2) from None
+    metrics, receipt = result["metrics"], result["receipt"]
+    typer.echo(json.dumps(redact({
+        "run_id": run_id, "freeze_sha256": receipt["freeze_sha256"],
+        "n_rows": receipt["n_rows"], "n_positive": receipt["n_positive"],
+        "n_problems": receipt["n_problems"], "attempts": len(receipt["attempts"]),
+        "primary_test_average_precision": metrics["primary"]["value"],
+        "predictions_sha256": receipt["predictions_sha256"],
+        "metrics_sha256": receipt["metrics_sha256"]}), sort_keys=True))
+
+
+@app.command("validate-evaluation")
+def validate_evaluation_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """Re-check a Stage 9 run read-only: freeze integrity against every current artifact,
+    validation/test split membership, exactly-once test receipt, bootstrap specification."""
+    from preanchor.probes.stage9 import validate_stage9
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    report = validate_stage9(run_path(run_id), repo, loaded)
+    typer.echo(json.dumps(redact(report), sort_keys=True))
+    if not report["ok"]:
+        raise typer.Exit(1)
+
+
+@app.command("run-sensitivities")
+def run_sensitivities_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    stage9_run_id: Annotated[str | None, typer.Option(
+        help="Frozen, test-evaluated Stage 9 run (default: the single such run).")] = None,
+    run_id: Annotated[str | None, typer.Option(help="Existing Stage 10 run to resume.")] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    workers: Annotated[int | None, typer.Option(min=1, max=8)] = None,
+) -> None:
+    """SPEC Stage 10: threshold/convergence/replacement sensitivities, correct-incorrect
+    subgroups, position and entropy quintiles, lead one at the frozen site, 100 stratified
+    label permutations and paired baseline differences, all from stored artifacts. CPU only;
+    never modifies the Stage 9 run or the frozen selection."""
+    from preanchor.probes.stage10 import discover_stage9, execute, prepare_run
+
+    if resume != (run_id is not None):
+        raise typer.BadParameter("--resume requires --run-id and vice versa")
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    if run_id:
+        run = run_path(run_id)
+    else:
+        stage9 = run_path(stage9_run_id) if stage9_run_id else discover_stage9(root)
+        run = prepare_run(root, repo, loaded, stage9)
+    summary = execute(run, repo, loaded, resume=resume, workers=workers)
+    typer.echo(json.dumps(redact({
+        "run_id": run.name, "stage9_run_id": summary["stage9_run_id"],
+        "freeze_sha256": summary["freeze_sha256"], "train_thresholds": summary["train_thresholds"],
+        "units": len(summary["units"]), "output_hashes": summary["output_hashes"],
+        "permutations": summary["records"]["permutations"]["splits"],
+        "lead_unavailable": summary["records"]["lead_time"]["unavailable"],
+        "elapsed_seconds": summary["elapsed_seconds"]}), sort_keys=True))
+
+
+@app.command("validate-sensitivities")
+def validate_sensitivities_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """Re-check a Stage 10 run: Stage 9 inputs unchanged, train-only thresholds with q90 equal
+    to the freeze, frozen-site-only models, lead-one mapping, permutation count/seeds/strata,
+    explicit undefined groups, no Stage 11 artifact."""
+    from preanchor.probes.stage10 import validate_stage10
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    report = validate_stage10(run_path(run_id), repo, loaded)
+    typer.echo(json.dumps(redact(report), sort_keys=True))
+    if not report["ok"]:
+        raise typer.Exit(1)
+
+
+@app.command("validate-activations")
+def validate_activations_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/smoke.yaml"),
+) -> None:
+    """Re-validate activation units, index and coverage without loading the model."""
+    from preanchor.features.extract import validate_run
+
+    typer.echo(json.dumps(validate_run(run_path(run_id), load_config(config)), sort_keys=True))
