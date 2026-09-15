@@ -51,6 +51,25 @@ records, `activations/index.parquet`, the Stage 6 summary, invariance report, re
 projection, boundary audit and logit features, run manifests and configs); Stages 3–5 are
 required dependencies of the bundle.
 
+Stage 7 (2026-09-15): the canonical Stage 7 run (`20260915T182306Z-3ab408d80a-7452f1c2`,
+40 activation units, 6,474 rows, 3.31 GB of float16 shards, the activation index, the
+extraction summary and projection, and the feature table with its audit and validation
+record) plus the published `data/processed/stage7/{features.parquet, .schema.json,
+feature_audit.json}` and their `.sha256` sidecars are protected by
+`--for-stage 7` (`src/preanchor/backup/classify.py::discover_stage7`); Stages 3–6 are its
+required dependencies (`STAGE_DEPENDENCIES[7] = (3, 4, 5, 6)`, Stage 6 being the
+measured-fit admission evidence). `data/processed/stage7/superseded/` (relocated smoke
+publications) is historical. `restore verify --for-stage 7` re-runs `validate-activations`
+and a read-only `validate-features` on the restored bytes and checks the index, shard and
+feature hashes, feature columns, head weights, frozen extraction settings and the
+published-copy identity against the bundle identity. The bundle IDs and the real scratch
+round trip are in `docs/stage7_validation.md`. The MacBook pull must run against a checkout
+that contains Stage 7 backup support (`56aea1b` or a descendant on `codex/stage7`):
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage7 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 7 --no-prepare
+```
+
 Before terminating a Lambda instance whose persistent filesystem you may never mount
 again: run the `backup` command above and require the literal line `BACKUP VERIFIED` and a
 `pull_verification` receipt under `~/preanchor-backups/portable/receipts/`. Nothing else
@@ -106,15 +125,17 @@ records on the filesystem, never from run IDs in code:
 
 | Class | Content | Bundled |
 | --- | --- | --- |
-| `MUST_BACK_UP` | `data/processed/stage3/**`, `data/processed/stage4/**`, the Stage 4 build run (labels, audit, summaries, manifests), Stage 4 raw-run provenance (manifest revisions, `source_manifest.json`, `SUCCESS.json`, attempts, config, patch) without its units, the Stage 5 production run (manifests, resolved config, patch, plan, tokenizer validation, runtime admission, projections, doctor, summary, `units_raw/**`, `units/**`, base validation, fresh labels) and the benchmark runs its projection cites, `artifacts/reconstruction/**`, `artifacts/amendments/**` | yes, exact bytes |
+| `MUST_BACK_UP` | `data/processed/stage3/**`, `data/processed/stage4/**`, the Stage 4 build run (labels, audit, summaries, manifests), Stage 4 raw-run provenance (manifest revisions, `source_manifest.json`, `SUCCESS.json`, attempts, config, patch) without its units, the Stage 5 production run (manifests, resolved config, patch, plan, tokenizer validation, runtime admission, projections, doctor, summary, `units_raw/**`, `units/**`, base validation, fresh labels) and the benchmark runs its projection cites, the complete Stage 6 runs on the current Stage 3/4 tables (`activations/**`, `stages/stage6/**`), the canonical Stage 7 run (`activations/**`, `features/**`, `stages/stage7/**`) and the published `data/processed/stage7/{features.parquet, .schema.json, feature_audit.json}` with sidecars, `artifacts/reconstruction/**`, `artifacts/amendments/**` | yes, exact bytes |
 | `SHOULD_BACK_UP` | heartbeat, progress, telemetry, startup and admission logs, W&B offline files, environment captures, doctor evidence, live-checkpoint indexes, Stage 2 run metadata | yes |
 | `REACQUIRE` | Stage 2 dataset payload, Stage 4 raw resample payload, DeepSeek weights and tokenizer, MiniLM, the vLLM image | no; the pin (revision, digest, source-manifest hash) is recorded in the manifest |
 | `CACHE_EXCLUDE` | `cache/**`, `.venv`, Docker layers, `.locks`, `quarantine`, partial units, `.run.lock`, `artifacts/portable` itself, primary-only `stage5-live-*/run` copies | no |
-| `HISTORICAL_EVIDENCE` | failed, superseded and non-dependency runs, legacy snapshots | only with `--include-historical` or `import-legacy` |
+| `HISTORICAL_EVIDENCE` | failed, superseded and non-dependency runs, legacy snapshots, `data/processed/stage7/superseded/` | only with `--include-historical` or `import-legacy` |
 | `SECRET` | `.env*`, credentials, keys, any file whose content looks like a token | never; a secret inside a run blocks `prepare` |
 
 Stage dependencies used for `--for-stage`: Stage 4 consumes Stage 3; Stage 5 consumes
-Stage 3 and `configs/pilot_targets_4682.yaml` (its rollout IDs hash both). A bundle for
+Stage 3 and `configs/pilot_targets_4682.yaml` (its rollout IDs hash both); Stage 6 and
+Stage 7 consume Stage 3 and the Stage 4 labels (`features.extract.load_inputs`), Stage 7
+also carrying Stage 5 (continuation) and Stage 6 (admission evidence). A bundle for
 stage N carries every completed canonical stage up to N; the transitive dependencies are
 flagged `required`.
 
