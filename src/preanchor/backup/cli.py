@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Annotated
@@ -16,6 +17,9 @@ from preanchor.backup.legacy import import_legacy
 from preanchor.backup.prepare import portable_root
 from preanchor.backup.receipts import list_receipts
 from preanchor.config import Settings
+from preanchor.control import control_root, presented_tokens
+from preanchor.control import leases as lease_module
+from preanchor.control import sessions as session_module
 from preanchor.logging import redact
 
 backup_app = typer.Typer(no_args_is_help=True,
@@ -49,13 +53,40 @@ def emit(value: dict, as_json: bool, text: str | None = None) -> None:
         typer.echo(text)
 
 
-def fail(exc: Exception, as_json: bool) -> None:
+def fail(exc: Exception, as_json: bool, code: int = 1) -> None:
     if as_json:
         typer.echo(json.dumps({"ok": False, "error": type(exc).__name__,
                                "detail": str(exc)}))
     else:
         typer.echo(f"{type(exc).__name__}: {exc}", err=True)
-    raise typer.Exit(1) from None
+    raise typer.Exit(code) from None
+
+
+@contextlib.contextmanager
+def writer_lease(root: Path, repo: Path, task: str):
+    """Yield ``{resource: token}`` proving the ``portable-store:writer`` lease.
+
+    A caller that already holds the lease exports its token in ``PREANCHOR_LEASE_TOKENS``
+    and nothing else happens. Otherwise (the normal MacBook-wrapper path) a short-lived
+    operational session is registered, the writer lease is acquired for the duration of
+    the command and released again; contention fails fast with the owner shown.
+    """
+    resource = prepare_module.WRITER_LEASE
+    presented = presented_tokens()
+    if resource in presented:
+        yield {resource: presented[resource]}
+        return
+    control = control_root(root)
+    session = session_module.register(control, task=task, role="backup-writer", worktree=repo)
+    try:
+        lease = lease_module.acquire(control, resource, session_id=session["session_id"],
+                                     purpose=task)
+        try:
+            yield {resource: lease["owner_token"]}
+        finally:
+            lease_module.release(control, resource, lease["owner_token"], reason="command end")
+    finally:
+        session_module.close(control, session["session_id"], outcome="command end")
 
 
 def _size(value: int | None) -> str:
@@ -142,10 +173,14 @@ def backup_prepare(
 ) -> None:
     """Validate, ingest new objects, write an immutable bundle manifest and receipt."""
     try:
-        result = prepare_module.prepare(resolve_root(root), repo, for_stage=for_stage,
-                                        run_id=run_id, include_historical=include_historical,
-                                        allow_dirty=allow_dirty)
-    except (ValueError, OSError, KeyError) as exc:
+        resolved = resolve_root(root)
+        with writer_lease(resolved, repo, f"backup prepare --for-stage {for_stage}") as tokens:
+            result = prepare_module.prepare(resolved, repo, for_stage=for_stage, run_id=run_id,
+                                            include_historical=include_historical,
+                                            allow_dirty=allow_dirty, lease_tokens=tokens)
+    except lease_module.LeaseHeld as exc:
+        fail(exc, as_json, 3)
+    except (ValueError, OSError, KeyError) as exc:   # ControlError is a ValueError
         fail(exc, as_json)
     text = (f"Prepared bundle {result['bundle_id']} ({result['kind']}): "
             f"{result['entries']} entries, {_size(result['logical_bytes'])} logical, "
@@ -210,7 +245,11 @@ def backup_import_legacy(
 ) -> None:
     """Verify a legacy checksums.json snapshot and ingest it as historical evidence."""
     try:
-        result = import_legacy(resolve_root(root), repo, snapshot)
+        resolved = resolve_root(root)
+        with writer_lease(resolved, repo, f"backup import-legacy {snapshot.name}") as tokens:
+            result = import_legacy(resolved, repo, snapshot, lease_tokens=tokens)
+    except lease_module.LeaseHeld as exc:
+        fail(exc, as_json, 3)
     except (ValueError, OSError, KeyError) as exc:
         fail(exc, as_json)
     emit(result, as_json, f"Imported {snapshot} as {result['bundle_id']}: "

@@ -348,3 +348,32 @@ uv run --frozen preanchor select --config configs/mvp.yaml --run-id <S8>
 uv run --frozen preanchor validate-probes --config configs/mvp.yaml --run-id <S8>
 ```
 Resume: `fit --config configs/mvp.yaml --resume --run-id <S8> --activation-run-id <S7>`.
+
+## Control plane v0.1 (2026-09-15, branch `agent/ops/control-plane-v1-20260915-0bd79efc`)
+
+Base `f6ce263` (the `codex/stage7` closure). Adds `src/preanchor/control/` and the
+`preanchor agent ...` / `preanchor lease ...` commands documented in `docs/concurrency.md`;
+enforces `gpu:h100` in every model load, `gpu:h100`+`service:vllm` in
+`scripts/start_vllm.sh`, and `portable-store:writer` in `backup prepare` / `import-legacy`
+(auto-leased by the CLI, so the MacBook wrapper is unchanged). State lives under
+`$PREANCHOR_ROOT/control/` and is outside every scientific identity and every portable
+bundle. Validated with the CPU suites and a TEST-namespace drill on the real persistent
+root (transcript in `$PREANCHOR_ROOT/control/validation/`). From Stage 8 on: one agent
+session = one worker branch (`agent/stage8/<role>-<id>`) = one worktree; `codex/stage8` has
+one integrator. The branch is pushed for independent review and is not merged; it does
+not start Stage 8 and touches no Stage 3–7 artifact. At the time of writing a separate
+session was running a CPU-only Stage 8 `fit` from `/home/ubuntu/preanchor-stage8`
+(`codex/stage8`, `0d07354`); that worktree, branch and run were left alone.
+
+
+## Control plane v0.1 review and integration (2026-09-15)
+
+Independent review on `agent/ops/control-plane-review-20260915-e1d2bc32` (from `dde76ce`)
+fixed one normal-path GPU bypass (MiniLM scorers on `--device cuda`), the `__` name
+aliasing and the MacBook restore-push gap; see `docs/concurrency.md` ("Independent review
+record") and `docs/decisions.md`. Stage 8 had already completed on `codex/stage8`
+(`358945f`; canonical run `20260915T193326Z-57bcb41c84-7ebd0db6` at `0d07354`, clean
+tree) before the control plane existed; its outputs keep that identity and are not
+recomputed. Every new Stage 8/9 session registers with `preanchor agent register` and
+takes `gpu:h100` / `service:vllm` / `portable-store:writer` only when it actually uses the
+GPU, vLLM or the store; CPU-only fits need no lease.
