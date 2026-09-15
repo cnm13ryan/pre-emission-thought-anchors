@@ -444,3 +444,29 @@ Stage 3/4 (working tree after `060f6c0`):
   `configs/mvp.yaml` has resolved to `c8414238…6ef4f` (scientific `82e38884…1a948`) since
   Stage 0 (`docs/stage0_validation.md`). No configuration changed; the Stage 6 documents
   are left as written.
+
+## Stage 7 operational closure (2026-09-15, commits `480031e`, `56aea1b` on `codex/stage7`)
+
+- **choice:** the canonical Stage 7 run is discovered as the complete extraction whose
+  `build-dataset` output hash equals the published `data/processed/stage7/features.parquet`
+  on the current Stage 3/4 tables (`discover_stage7`); any other complete Stage 7 run is
+  historical, two publishers block. `STAGE_DEPENDENCIES[7] = (3, 4, 5, 6)`: Stage 3/4 are
+  its inputs, Stage 5 the MVP continuation dependency, Stage 6 its admission evidence.
+  Rejected alternatives: bundling every run with a `stages.stage7` entry, or dropping
+  Stage 6 from the closure (the launch projection lives in a Stage 6-state smoke run).
+- **choice:** protected Stage 7 bytes are the run's `activations/`, `features/` and
+  `stages/stage7/` trees, its manifests and config, and the published table with schema,
+  audit and sidecars; `data/processed/stage7/superseded/` is historical evidence.
+  `restore verify --for-stage 7` reuses the project's own validators
+  (`validate_run`, `validate_features(sample=0, write_record=False)`) instead of a second
+  implementation.
+- **fact:** the first scratch verification rewrote the restored `feature_validation.json`
+  because the verifier called the validator with its record writer on; fixed in `56aea1b`
+  (read-only verification, asserted by the test). The first bundle
+  `20260915T185656Z-038fb6cf…` (357 new objects, 3,118,456,529 B) and the final bundle
+  `20260915T191239Z-161f21fc…` (producer `56aea1b` clean, 0 new objects) have identical
+  content; both scratch restores are retained.
+- **fact:** the final bundle restored into an empty local-disk root and passed
+  `restore verify --for-stage 7` (140 checks, 0 failed); an independent SHA-256 comparison of
+  289 files / 3.32 GB found no mismatch. The MacBook secondary verification is pending and
+  is not claimed. Physical origin/destination are recorded, never compared.
