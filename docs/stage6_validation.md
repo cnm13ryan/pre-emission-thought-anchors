@@ -120,5 +120,10 @@ against the restored Stage 3/4 tables and the primary invariance gate; an indepe
 SHA-256 comparison of 196 identity-bearing files found no mismatch. The scratch root is
 retained pending the user's approval to delete it.
 
-State: **Stage 6 portable bundle prepared and restore-verified; MacBook secondary
-verification pending.** The MacBook command is in `docs/backup_restore.md`.
+State: **Stage 6 secondary copy verified.** The MacBook pulled bundle `20260915T180804Z-f4cd4b0…`
+and independently rehashed all 4,434 referenced objects (250,021,342 bytes, 0 missing,
+0 corrupt), outcome `secondary_copy_verified`, receipt
+`artifacts/portable/receipts/20260915T181939Z-pull_verification-f4cd4b0b8f03-d185f734.json` (copied back to Lambda, sidecar
+verified), final line `BACKUP VERIFIED`. The Stage 6 operational backup gate is satisfied.
+The bundle remains the immutable one prepared from producer commit `128e1d3`; later
+documentation commits do not replace it.

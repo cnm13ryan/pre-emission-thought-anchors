@@ -30,8 +30,11 @@ receipt `~/preanchor-backups/portable/receipts/20260915T163431Z-pull_verificatio
 
 Stage 6 (2026-09-15): bundle
 `20260915T180804Z-f4cd4b0b8f03569ba33b87502010f3d015214a3157469b56d947faf1d73e6d7d` was
-prepared on Lambda (152 new objects, 216 MB beyond the Stage 5 store) and restore-verified
-into a scratch root. The Stage 5 secondary copy above stays as it is. The MacBook pull for
+prepared on Lambda (152 new objects, 216 MB beyond the Stage 5 store), restore-verified
+into a scratch root, and then independently verified on the MacBook (4,434 objects,
+250,021,342 bytes, 0 missing, 0 corrupt, receipt
+`~/preanchor-backups/portable/receipts/20260915T181939Z-pull_verification-f4cd4b0b8f03-d185f734.json`, copied back to
+Lambda, final line `BACKUP VERIFIED`). The Stage 5 secondary copy above stays as it is. The MacBook pull for
 Stage 6 must run against a checkout that contains Stage 6 backup support (`128e1d3` or a
 descendant); `~/preanchor-repo` is still on `codex/mvp`, so pass `PREANCHOR_REMOTE_REPO`:
 
