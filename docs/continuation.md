@@ -377,3 +377,23 @@ tree) before the control plane existed; its outputs keep that identity and are n
 recomputed. Every new Stage 8/9 session registers with `preanchor agent register` and
 takes `gpu:h100` / `service:vllm` / `portable-store:writer` only when it actually uses the
 GPU, vLLM or the store; CPU-only fits need no lease.
+
+## Stage 9 closure (2026-09-15, branch `agent/stage9/validation-freeze-20260915-46c93dfe`)
+
+SPEC Stage 9 is complete and documented in `docs/stage9_validation.md`
+(protocol: `docs/test_lock_protocol.md`). Commands `preanchor calibrate`, `freeze-selection`,
+`evaluate-test`, `validate-evaluation` (`src/preanchor/probes/stage9.py`, `calibrate.py`,
+`evaluation.py`, `bootstrap.py`). Canonical Stage 9 run
+`20260915T201107Z-484989d2fe-19f1ab0d` on Stage 8 run `20260915T193326Z-57bcb41c84-7ebd0db6`,
+executed at clean `67f824a`; freeze SHA-256
+`e68f1d829145431481d81d25c1546773d81e66c3cd3a39a1fdd98f298113e0bf`; Platt calibration fitted
+on validation (680 rows, 54 anchors); **the held-out test was evaluated exactly once**
+(689 rows, 25 anchors, 4 problems; primary test AUCPR 0.0941, interval 0.036 … 0.162;
+receipt `metrics/test_receipt.json`). Any post-freeze selection change invalidates this run
+(`validate-evaluation` reports it); never evaluate test again under this protocol.
+Backup: bundle `20260915T203439Z-8605ff94cce0…` prepared and locally verified for stage 9;
+the MacBook `pull_verification` receipt is still required (`./scripts/preanchor_portable.sh
+backup <host> --for-stage 9`). Stage 10 is not started and not authorised; lead-time one
+needs a new GPU extraction; the remaining Stage 10 items are CPU-only from stored shards.
+The worktree `~/preanchor-stage9` uses its own `.venv` and needs `git submodule update
+--init` (vendor pins) before the suite passes.
