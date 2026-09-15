@@ -32,6 +32,10 @@ class ReplacementSimilarity:
 
     def __init__(self, *, device: str = "cpu", model_id: str = SIMILARITY_MODEL,
                  revision: str = SIMILARITY_REVISION, batch_size: int = 256):
+        if device != "cpu":
+            from preanchor.control.leases import require
+
+            require(["gpu:h100"])   # MiniLM on the shared GPU still needs its owner
         from sentence_transformers import SentenceTransformer
 
         self.model_id, self.revision, self.device = model_id, revision, device

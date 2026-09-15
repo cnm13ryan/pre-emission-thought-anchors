@@ -175,3 +175,22 @@ class UnitStore:
                                                      "files": files})
             self.validate(key)
             return directory, True
+
+
+def same_logical_path(recorded: str, actual: Path, run: Path) -> bool:
+    """Accept a recorded absolute path when it names the same run-relative location.
+
+    Stage 2/4 source manifests store the physical ``local_path`` of each unit file. After
+    a restore onto a different persistent root the bytes and hashes are identical but the
+    prefix differs. Equality of the ``<run_id>/<run-relative path>`` suffix keeps the run
+    identity and unit key strict while making the physical prefix provenance only.
+    Legacy manifests with an exactly equal absolute path still validate.
+    """
+    if recorded == str(actual):
+        return True
+    try:
+        relative = Path(actual).relative_to(run)
+    except ValueError:
+        return False
+    suffix = "/" + run.name + "/" + relative.as_posix()
+    return recorded.replace("\\", "/").endswith(suffix)

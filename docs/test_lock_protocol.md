@@ -1,7 +1,48 @@
 # Test lock protocol
 
-Document the training-only selection, validation-only calibration and single frozen-hash test execution.
+Training-only selection, validation-only calibration and a single frozen-hash test
+evaluation (SPEC §3.4, §3.10, §10.5, Stage 8-9; AGENTS §5.4).
 
-Not implemented yet. Both trajectories remain grouped by problem in the fixed 12/4/4
-split. No test data or test metrics have been inspected. Test results will be described
-as an exploratory held-out engineering test with four problems.
+## Partitions
+
+The fixed problem split `configs/splits/mvp_20_v1.yaml` (12 train / 4 validation / 4 test
+problems, both trajectories of a problem together) is the only partition. `config.py`
+asserts the sets are disjoint; `tests/scientific/test_split_isolation.py` asserts no
+row-wise splitter exists in `src/`. The four test problems are an exploratory held-out
+engineering test, never a confirmatory test.
+
+## Stage 8 (`preanchor fit`, `preanchor select`) — training rows only
+
+- `probes/dataset.py` selects `eligible` rows with `split == "train"` and refuses any other
+  partition on the command line. Validation and test rows are never loaded into a fit,
+  scaler, residualiser or selection. `validate-probes` rejects any non-training row in
+  `fold_predictions.parquet`.
+- Folds: `StratifiedGroupKFold(4, shuffle=True)` grouped by `problem_id`, seeded by
+  `derived_seed(seed_root, "cv_folds")`; the seed and validation problems of every fold are
+  recorded in the run manifest (`fold_seeds`). A fold with a single class fails the run.
+- Every `StandardScaler`, residualisation projection and hyperparameter is fitted on the
+  training rows of a fold only (`tests/scientific/test_pipeline_fit_scope.py`).
+- The anchor threshold is the Stage 4 train-only q90 (`anchor_threshold` column); Stage 8
+  reads it and never recomputes a quantile.
+- Selection is by mean train-CV average precision (binary) and Spearman with RMSE tie-break
+  (Ridge). The result is `probe_models/frozen_selection.pending.json`; nothing in Stage 8
+  reads a validation or test metric.
+
+## Stage 9 — validation calibration and the freeze
+
+- `calibrate` reads validation rows only; the Platt calibrator is skipped, with the reason
+  recorded, when validation has fewer than 20 positives or one class
+  (`probes/calibrate.py::calibration_decision`).
+- `freeze-selection` copies the pending selection, the calibrator and the threshold into
+  `frozen_selection.json`; its SHA-256 is the freeze hash.
+- `evaluate-test` runs once, requires `--confirm-frozen <sha256>` equal to the recorded
+  freeze hash, refuses to run before the freeze exists, and any later change to the
+  selection invalidates the run (new `run_id`).
+
+## Status
+
+Stage 8 implemented (`codex/stage8`); validated on synthetic runs and a two-site real-data
+smoke. Stage 9 ran once (`20260915T201107Z-484989d2fe-19f1ab0d`, freeze `e68f1d82…`). Stage 10
+(`preanchor run-sensitivities`) reads that run read-only: alternate thresholds come from
+training quantiles, refits use the frozen site and hyperparameter, and nothing is selected
+on validation or test (`docs/stage10_validation.md`).

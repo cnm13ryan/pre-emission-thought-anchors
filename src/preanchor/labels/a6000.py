@@ -1,6 +1,8 @@
-"""Measured A6000 Stage 5 admission, isolated benchmark and base-only execution.
+"""Measured Stage 5 admission, isolated benchmark and base-only execution.
 
-Runtime choices live beside the frozen scientific config, never in rollout IDs.
+Named for the A6000 session that introduced it; the runner is hardware-agnostic within
+the measured cards in HARDWARE. Runtime choices live beside the frozen scientific
+config, never in rollout IDs.
 """
 
 from __future__ import annotations
@@ -19,15 +21,17 @@ from pathlib import Path
 
 import httpx
 
-from preanchor.config import Settings, config_hash, load_config
+from preanchor.config import Settings, config_hash, load_config, read_yaml
 from preanchor.doctor import run_doctor
 from preanchor.ids import file_hash
 from preanchor.io import atomic_bytes, json_bytes, lock, read_json, write_json, write_parquet
 from preanchor.labels.batching import (
     KV_BYTES_PER_TOKEN,
+    MAX_CONCURRENCY,
     MAX_CONTEXT,
     StreamingVLLMBackend,
     admitted_concurrency,
+    choose,
     continuous,
     required_capacity,
     roofline,
@@ -55,6 +59,26 @@ from preanchor.tracking import start_tracking
 
 REPO = Path(__file__).resolve().parents[3]
 CONFIG = REPO / "configs/pilot.yaml"
+# Measured cards: nvidia-smi name -> execution profile and vendor peak figures used only
+# for roofline context (HBM bandwidth in bytes/s, dense BF16 tensor throughput in FLOP/s).
+HARDWARE = {
+    "NVIDIA RTX A6000": dict(profile="a6000_48", bandwidth=768e9, dense_bf16=154.85e12),
+    "NVIDIA H100 PCIe": dict(profile="h100_pcie_80", bandwidth=2.0e12, dense_bf16=756e12),
+}
+# The frozen context length: longest Stage 5 prompt plus max_new_tokens 16384. Profile
+# files may carry a larger max_model_len for other stages; Stage 5 never uses it.
+MAX_MODEL_LEN = "20480"
+
+
+def hardware(name):
+    if name not in HARDWARE:
+        raise ValueError(f"This admission applies only to measured cards: {sorted(HARDWARE)}")
+    return HARDWARE[name]
+
+
+def profile_utilization(name):
+    return float(read_yaml(REPO / f"configs/lambda/{hardware(name)['profile']}.yaml")["vllm"][
+        "gpu_memory_utilization"])
 # The planning rate comes from PREANCHOR_HOURLY_RATE (AGENTS §8), never a constant.
 
 
@@ -68,8 +92,7 @@ def gpu():
         text=True,
     ).strip()
     name, total, used, free, driver, util = [s.strip() for s in value.split(",")]
-    if name != "NVIDIA RTX A6000":
-        raise ValueError("This admission applies only to the measured RTX A6000")
+    hardware(name)
     return dict(
         name=name,
         total_mib=int(total),
@@ -106,17 +129,27 @@ def server_admission(n, startup):
         raise ValueError("vLLM image digest mismatch")
     args = inspection["Config"]["Cmd"]
     config = load_config(CONFIG)
+    card = gpu()
+    utilization = profile_utilization(card["name"])
+    if not 1 <= n <= MAX_CONCURRENCY:
+        raise ValueError(f"Concurrency must be between 1 and {MAX_CONCURRENCY}")
     expected = {
         "--model": config.model.id,
         "--revision": config.model.revision,
         "--dtype": "bfloat16",
         "--max-num-seqs": str(n),
-        "--max-model-len": "20480",
-        "--gpu-memory-utilization": "0.92",
+        "--max-model-len": MAX_MODEL_LEN,
+        "--gpu-memory-utilization": utilization,
         "--seed": str(config.seed_root),
     }
     for key, value in expected.items():
-        if key not in args or args[args.index(key) + 1] != value:
+        if key not in args:
+            raise ValueError(f"Runtime mismatch: {key}")
+        actual = args[args.index(key) + 1]
+        if isinstance(value, float):
+            if float(actual) != value:
+                raise ValueError(f"Runtime mismatch: {key}")
+        elif actual != value:
             raise ValueError(f"Runtime mismatch: {key}")
     if "--enable-prefix-caching" not in args or any(
         "quantization" in a or "speculative" in a for a in args
@@ -146,16 +179,19 @@ def server_admission(n, startup):
         live_max_context_tokens=n * MAX_CONTEXT,
         kv_headroom_tokens=capacity - n * MAX_CONTEXT,
         kv_safety_fraction=capacity / (n * MAX_CONTEXT) - 1,
-        gpu=gpu(),
+        admitted_concurrency=admitted_concurrency(capacity),
+        gpu=card,
+        hardware_profile=hardware(card["name"])["profile"],
         vllm_digest=DIGEST,
         args=args,
         startup_log_sha256=file_hash(startup),
         memory_report=memory_lines,
         resolved_runtime_hash=config_hash(expected),
         kv_bytes_per_token=KV_BYTES_PER_TOKEN,
-        bandwidth_bytes_per_second=768e9,
-        dense_bf16_flops_per_second=154.85e12,
-        critical_intensity_flops_per_byte=154.85e12 / 768e9,
+        bandwidth_bytes_per_second=hardware(card["name"])["bandwidth"],
+        dense_bf16_flops_per_second=hardware(card["name"])["dense_bf16"],
+        critical_intensity_flops_per_byte=hardware(card["name"])["dense_bf16"]
+        / hardware(card["name"])["bandwidth"],
     )
 
 
@@ -303,7 +339,8 @@ def warning_lines(startup):
     ]
 
 
-def summarize(rows, wall, telemetry, before, after):
+def summarize(rows, wall, telemetry, before, after, card=None):
+    card = card or hardware(gpu()["name"])
     tokens = sum(r["generated_token_count"] for r in rows)
     lengths = [r["generated_token_count"] for r in rows]
     rates = [
@@ -360,7 +397,13 @@ def summarize(rows, wall, telemetry, before, after):
         price_usd_per_hour=hourly_rate(),
         rate_source="PREANCHOR_HOURLY_RATE user planning rate; billed rate unavailable",
         roofline_tokens_per_second={
-            str(b): {str(c): roofline(b, c) for c in (2750, MAX_CONTEXT)} for b in (1, 2, 3)
+            str(b): {
+                str(c): roofline(
+                    b, c, bandwidth=card["bandwidth"], dense_flops=card["dense_bf16"]
+                )
+                for c in (2750, MAX_CONTEXT)
+            }
+            for b in (1, 2, 3, 4, 6, 8, 10, 12, 16)
         },
     )
 
@@ -595,15 +638,8 @@ def select(root, benchmark_ids, startup):
         if admission["kv_capacity_tokens"] < required_capacity(summary["concurrency"]):
             raise ValueError("KV safety margin failed")
         candidates.append((summary, admission, stage))
-    candidates.sort(key=lambda c: c[0]["concurrency"])
-    chosen = candidates[0]
-    if len(candidates) == 2:
-        a, b = candidates
-        if [a[0]["concurrency"], b[0]["concurrency"]] != [2, 3]:
-            raise ValueError("Expected B2/B3 comparison")
-        if b[0]["aggregate_tokens_per_second"] >= 1.1 * a[0]["aggregate_tokens_per_second"]:
-            chosen = b
-    summary, admission, stage = chosen
+    by_concurrency = {c[0]["concurrency"]: c for c in candidates}
+    summary, admission, stage = by_concurrency[choose([c[0] for c in candidates])["concurrency"]]
     n = summary["concurrency"]
     run = initialize(root, "production", n, startup)
     production_manifest = load_manifest(run)
@@ -645,7 +681,8 @@ def select(root, benchmark_ids, startup):
             {"path": str(c[2] / "summary.json"), "sha256": file_hash(c[2] / "summary.json")}
             for c in candidates
         ],
-        selection_rule="B3 only with >=10% aggregate throughput improvement and safety gates",
+        selection_rule="ascending chain: a larger safe concurrency only with >=10% aggregate "
+        "throughput improvement over the next-smaller safe one",
         created_at=utc_now(),
     )
     for name in ("resource_projection_a6000.json", "resource_projection.json"):
@@ -750,7 +787,9 @@ def finalize(root, run):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("benchmark", "select", "execute", "finalize"))
-    parser.add_argument("--concurrency", type=int, choices=(1, 2, 3), default=2)
+    parser.add_argument(
+        "--concurrency", type=int, choices=range(1, MAX_CONCURRENCY + 1), default=2
+    )
     parser.add_argument("--startup", type=Path)
     parser.add_argument("--run-id")
     parser.add_argument("--benchmarks", nargs="+")

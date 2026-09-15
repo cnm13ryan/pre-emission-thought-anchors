@@ -18,6 +18,9 @@ from preanchor.labels.generate import (
 
 KV_BYTES_PER_TOKEN = 196608
 MAX_CONTEXT = 17417
+# Largest in-flight request count any profile may request; the measured KV capacity
+# (with the 15% worst-case margin) admits fewer on smaller cards.
+MAX_CONCURRENCY = 16
 
 
 def required_capacity(concurrency):
@@ -25,10 +28,27 @@ def required_capacity(concurrency):
 
 
 def admitted_concurrency(capacity):
-    for n in (3, 2, 1):
+    for n in range(MAX_CONCURRENCY, 0, -1):
         if capacity >= required_capacity(n):
             return n
     raise ValueError("Insufficient KV capacity even for one sequence with margin")
+
+
+def choose(candidates, *, improvement=1.1):
+    """Ascending chain rule: a larger safe concurrency is taken only when its measured
+    aggregate throughput improves on the next-smaller safe one by ``improvement``."""
+    ordered = sorted(candidates, key=lambda c: c["concurrency"])
+    if not ordered:
+        raise ValueError("No benchmark passed the safety gates")
+    if len({c["concurrency"] for c in ordered}) != len(ordered):
+        raise ValueError("Duplicate benchmark concurrency")
+    chosen = ordered[0]
+    for previous, candidate in zip(ordered, ordered[1:], strict=False):
+        rate = candidate["aggregate_tokens_per_second"]
+        if rate < improvement * previous["aggregate_tokens_per_second"]:
+            break
+        chosen = candidate
+    return chosen
 
 
 def roofline(batch, context, parameters=14.77e9, bandwidth=768e9, dense_flops=154.85e12):
@@ -45,7 +65,7 @@ def continuous(specs, work, concurrency, *, tick=lambda: None, stopping=lambda: 
     A stop or error drains in-flight durable writes and launches no new jobs.
     """
     specs = list(specs)
-    if concurrency not in (1, 2, 3):
+    if concurrency not in range(1, MAX_CONCURRENCY + 1):
         raise ValueError("Unsupported concurrency")
     if len({s.rollout_id for s in specs}) != len(specs):
         raise ValueError("Duplicate rollout IDs")
