@@ -589,13 +589,14 @@ def select(root, benchmark_ids, startup):
     summary, admission, stage = chosen
     n = summary["concurrency"]
     run = initialize(root, "production", n, startup)
+    production_manifest = load_manifest(run)
     total_tokens = summary["mean_output_tokens"] * 256
     seconds = total_tokens / summary["aggregate_tokens_per_second"]
     if not math.isfinite(seconds) or seconds <= 0 or seconds > 20 * 3600:
         raise ValueError("Projection outside order-of-magnitude sanity range; diagnosis required")
     projection = dict(
         schema_version=1,
-        code_commit=manifest["source"]["git_sha"],
+        code_commit=production_manifest["source"]["git_sha"],
         config_hash=config.resolved_hash(),
         unit_count=256,
         benchmark_units=8,
