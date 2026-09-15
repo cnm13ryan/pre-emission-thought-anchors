@@ -79,7 +79,8 @@ benchmark run, and `python -m preanchor.labels.pilot --prepare --benchmark-run-i
 Persistent filesystems are region-specific; a new instance may receive an empty
 filesystem with a different UUID. Canonical state is protected by the content-addressed
 portable store (`docs/backup_restore.md`). Routine, from the MacBook:
-`./scripts/preanchor_portable.sh backup <ssh-host> --for-stage <N>` after every canonical
+`./scripts/preanchor_portable.sh backup <ssh-host> --for-stage <N>` (Stage 6 and later:
+from a checkout with Stage 6 backup support, see `docs/backup_restore.md`) after every canonical
 stage and before any instance termination; it prints `BACKUP VERIFIED` only after the
 MacBook rehashed every object. Restore onto a fresh filesystem with
 `./scripts/preanchor_portable.sh restore <new-host> --for-stage <N>` after
