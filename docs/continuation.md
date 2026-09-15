@@ -306,6 +306,30 @@ added, using `STAGE_DEPENDENCIES` in `src/preanchor/backup/classify.py`), then e
 user authorisation. Probes read `PRIMARY_FEATURES` only and load one layer at a time from
 the shards through the `shard_path`/`row_idx` pointers of the feature table.
 
+## Stage 7 operational closure (2026-09-15, branch `codex/stage7`)
+
+Stage 7 is finalized (`docs/stage7_validation.md`). `codex/stage6` (Stage 6 backup support
+and its verified MacBook copy) is merged into `codex/stage7` at `480031e`; Stage 7 backup
+support is `56aea1b`. Canonical Stage 7 state is in the portable store as bundle
+`20260915T191239Z-161f21fc4351fa8a064ee7a79d0750fa511b5d6afd71543930c5247ee8acc0e5`
+(canonical, protected through Stage 7, producer `56aea1b`, 4,791 objects, 3.61 GB logical,
+357 objects / 3.12 GB incremental over the verified Stage 6 store; restore-verified into
+`/home/ubuntu/preanchor-scratch-restore-stage7-b`). **State: Stage 7 portable bundle prepared
+and restore-verified; MacBook secondary verification pending.** The user runs, from the
+MacBook:
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage7 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 7 --no-prepare
+```
+
+Only `BACKUP VERIFIED` plus a `pull_verification` receipt for that bundle satisfies the
+Stage 7 backup gate. Two scratch restore roots (`…-stage7`, `…-stage7-b`, 3.6 GB each on the
+local disk) await the user's deletion approval. Stage 8 is not started; it needs the
+verified Stage 7 secondary copy and explicit authorisation. Stage 8 consumers read
+`data/processed/stage7/features.parquet` (primary features through
+`observables.PRIMARY_FEATURES`) and load activations one layer at a time through the
+table's `activation_run_id`/`shard_path`/`row_idx` pointers.
+
 ## Stage 8 implementation (2026-09-15, branch `codex/stage8`)
 
 `preanchor fit`, `select`, `validate-probes` and `src/preanchor/probes/` implement SPEC
