@@ -477,7 +477,7 @@ def execute(root, run, startup):
                     fresh = rows[initial_count:]
                     elapsed = time.monotonic() - started
                     tokens = sum(r["generated_token_count"] for r in fresh)
-                    rate = tokens / elapsed
+                    throughput = tokens / elapsed
                     progress = dict(
                         updated_at=utc_now(),
                         completed=len(rows),
@@ -485,12 +485,12 @@ def execute(root, run, startup):
                         by_fork=dict(Counter(r["fork_idx"] for r in rows)),
                         session_seconds=elapsed,
                         session_tokens=tokens,
-                        aggregate_tokens_per_second=rate,
+                        aggregate_tokens_per_second=throughput,
                         peak_hbm_mib=max(t["gpu"]["used_mib"] for t in telemetry),
                         eta_seconds=(len(specs) - len(rows))
                         * statistics.mean([r["generated_token_count"] for r in fresh])
-                        / rate
-                        if rate
+                        / throughput
+                        if throughput
                         else None,
                         session_cost_usd=elapsed / 3600 * rate,
                         truncations=sum(r["finish_reason"] == "length" for r in rows),
@@ -498,7 +498,7 @@ def execute(root, run, startup):
                     atomic_bytes(stage / "progress.json", json_bytes(progress), replace=True)
                     print(json.dumps(progress), flush=True)
                     if not benchmark and len(fresh) >= 24 and not window_checked:
-                        ratio = rate / projection["aggregate_tokens_per_second"]
+                        ratio = throughput / projection["aggregate_tokens_per_second"]
                         write_json(
                             stage / f"first_window_{attempt}.json",
                             {**progress, "benchmark_ratio": ratio},
