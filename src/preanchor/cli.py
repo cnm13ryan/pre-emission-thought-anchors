@@ -523,6 +523,58 @@ def extract_activations_command(
                                   "diagnostics": result.get("diagnostics")}), sort_keys=True))
 
 
+@app.command("build-dataset")
+def build_dataset_command(
+    run_id: Annotated[str, typer.Option(help="Completed extract-activations run.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    device: Annotated[str | None, typer.Option(
+        help="Device for the float32 norm+lm_head statistics; default cuda:0 if available.")]
+    = None,
+    publish: Annotated[bool, typer.Option()] = True,
+) -> None:
+    """SPEC Stage 7: strict observables joined to Stage 4 labels by sentence_id.
+
+    Reads the run's validated activation shards, tokenises each stored trace once, computes
+    the SPEC §3.9 observables in float32 from stored layer-48 boundary states and writes
+    features/features.parquet plus feature_audit.json; publishes to
+    data/processed/stage7/features.parquet.
+    """
+    from preanchor.features.dataset import build_dataset
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    result = build_dataset(run_path(run_id), repo, loaded, root, device=device, publish=publish)
+    audit = result["audit"]
+    typer.echo(json.dumps(redact({"run_id": run_id, "n_rows": result["n_rows"],
+                                  "features_sha256": result["features_sha256"],
+                                  "device": audit["device"], "units": audit["units"],
+                                  "eligible_rows": audit["eligible_rows"],
+                                  "anchor_rows": audit["anchor_rows"],
+                                  "published": audit["published"]}), sort_keys=True))
+
+
+@app.command("validate-features")
+def validate_features_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    sample: Annotated[int, typer.Option(min=0, help="Rows recomputed from shards.")] = 64,
+    device: Annotated[str | None, typer.Option()] = None,
+) -> None:
+    """Re-validate the Stage 7 feature table: coverage, joins, allow-list, invariants,
+    published-copy identity and an exact recomputation of a seeded row sample."""
+    from preanchor.features.dataset import validate_features
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    report = validate_features(run_path(run_id), loaded, root, sample=sample, device=device)
+    typer.echo(json.dumps(redact({k: report[k] for k in (
+        "ok", "run_id", "rows", "units", "features_sha256", "published_identical",
+        "recomputed", "split_rows", "eligible_rows", "anchor_rows")}), sort_keys=True))
+
+
 @app.command("validate-activations")
 def validate_activations_command(
     run_id: Annotated[str, typer.Option()],
