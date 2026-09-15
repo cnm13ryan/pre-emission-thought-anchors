@@ -367,3 +367,51 @@ Stage 3/4 (working tree after `060f6c0`):
   latter satisfies the backup gate. The MacBook path and filesystem identity are
   provenance only and never enter scientific identity. Rejected alternative: treating
   the NFS bundle or the run manifest's `backup` field as verification.
+
+## Stage 7 full activation and feature extraction (2026-09-15, branch `codex/stage7`)
+
+- **fact:** Stage 7 admission at launch commit `3c2d4ec`: the Stage 5 MacBook secondary
+  copy (bundle `20260915T163333Z-d565605b…`, receipt `20260915T163431Z-pull_verification-…`)
+  re-verified with the current `preanchor backup verify` (4,282 objects, 0 missing, 0
+  corrupt); production doctor ok; 250 CPU tests and the GPU invariance test pass; projection
+  regenerated at the launch commit (215 s, $0.15, 3.31 GB); 1.94 PB free on NFS. Rejected
+  alternative: treating the run manifests' `backup.verified: false` as the backup state.
+- **choice:** Stage 7 work lives on `codex/stage7`, branched from the `codex/stage6` merge
+  commit `afd3714`, because a sibling session held `codex/stage6` checked out with
+  uncommitted backup changes and per-stage branches (`codex/stage5`, `codex/stage6`) are the
+  established convention. No PR was merged.
+- **fact (production, run `20260915T182306Z-3ab408d80a-7452f1c2`):** 40 units, 6,474 rows,
+  187,579 tokens, 29.1 s of forward time at 6,436 tok/s, peak 29,973 MiB, 322 s extraction
+  wall, 3,314,695,040 shard bytes; `validate-activations`, `build-dataset` (61 s) and
+  `validate-features` (256 rows recomputed exactly) pass; no failure, resume or quarantine.
+  The full `3935:incorrect` shard is byte-identical to the Stage 6 envelope run from
+  commit `f9dd294`.
+- **choice (observables):** next-token statistics apply the pinned `model.norm.weight` and
+  `lm_head.weight`, loaded alone from the snapshot shards and upcast to float32, to the
+  stored float16 `layer=48` states (`features.statistics_dtype: float32`). The Stage 6
+  diagnostic `logit_features.parquet` used the bfloat16 head and differs by up to 0.03–0.05
+  on the smoke rows; it remains a Stage 6 diagnostic. `previous_sentence_tokens` is the
+  token span `[target_token_start, target_token_end)` of `S_{i−1}` (zero for the first
+  sentence). `generated_token_count` counts full-trace tokens after the stored prompt using
+  the trace offsets (no substring re-tokenisation; the prompt decode round-trips exactly in
+  40/40). `diagnostic__relative_completed_trace_position` is `sentence_idx / n_sentences`.
+  Rejected alternatives: computing statistics in the extraction process with the bf16 head;
+  defining the previous-sentence length as the distance between sentence starts (it counts
+  inter-sentence whitespace).
+- **choice (dataset layout):** the feature table carries identity, `split`, the 12 primary
+  observables, the two diagnostics, boundary fields, the activation pointer
+  (`activation_run_id`, `shard_path`, `row_idx`) and the Stage 4 target columns; support
+  counts, convergence and final-answer indices stay in `labels.parquet`. Published path is
+  `data/processed/stage7/features.parquet` (the repository's per-stage convention; SPEC
+  writes `data/processed/features.parquet`). Only the `mvp` configuration publishes; a
+  canonical table with different content is never overwritten; a stale smoke publication is
+  relocated to `data/processed/stage7/superseded/<run_id>/`, never deleted.
+- **fact:** the first smoke run at `1cfa152` published its 16-row table to the canonical
+  path because publication was unconditional; fixed in `3c2d4ec` (fail-closed), the smoke
+  was rerun at `3c2d4ec` and the production build relocated the stale files
+  (`superseded_publication` in `feature_audit.json`). The run and its files are retained.
+- **fact:** the `9bad4b36…960ff` / `14e279c5…fabd7` hashes recorded for `configs/mvp.yaml`
+  in `docs/stage6_plan.md` and `docs/stage6_validation.md` belong to `configs/pilot.yaml`;
+  `configs/mvp.yaml` has resolved to `c8414238…6ef4f` (scientific `82e38884…1a948`) since
+  Stage 0 (`docs/stage0_validation.md`). No configuration changed; the Stage 6 documents
+  are left as written.
