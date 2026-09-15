@@ -552,7 +552,11 @@ def select(root, benchmark_ids, startup):
     candidates = []
     for run_id in benchmark_ids:
         directory = root / "artifacts/runs" / run_id
-        manifest = check_resume(directory, REPO, config)
+        manifest = load_manifest(directory)
+        if manifest["identity"]["resolved_config_hash"] != config.resolved_hash():
+            raise ValueError("Benchmark config differs from current scientific config")
+        if manifest["stages"].get("stage5", {}).get("namespace") != "benchmark":
+            raise ValueError("Candidate is not a benchmark run")
         stage = directory / "stages/stage5"
         summary = read_json(stage / "summary.json")
         admission = read_json(stage / "runtime_admission.json")
