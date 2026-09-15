@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from backup_fixtures import ROOT, SOURCE, fake_provenance, make_world
+from backup_fixtures import ROOT, SOURCE, fake_provenance, grant_writer_lease, make_world
 
 from preanchor.backup.bundle import load_bundle
 from preanchor.backup.classify import MUST_BACK_UP, SECRET, SHOULD_BACK_UP
@@ -372,6 +372,7 @@ def test_import_legacy_verifies_checksums_before_ingesting(tmp_path, monkeypatch
     with pytest.raises(ValueError, match="checksum mismatch"):
         import_legacy(root, ROOT, snapshot)
     assert not portable(root).exists()
+    grant_writer_lease(root, monkeypatch)      # ingest mutates the store: writer lease
     entries["preanchor.bundle"] = file_hash(snapshot / "preanchor.bundle")
     (snapshot / "checksums.json").write_text(json.dumps(entries))
     result = import_legacy(root, ROOT, snapshot)

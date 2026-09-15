@@ -18,11 +18,15 @@ def load_tokenizer(config: ExperimentConfig):
 
 def load_model(config: ExperimentConfig, device: str = "cuda:0"):
     """Exact revision, bfloat16, SDPA, one explicit device; fails on CPU/meta parameters."""
-    import torch
-    from transformers import AutoModelForCausalLM
+    from preanchor.control.leases import require
 
     if config.model.quantization is not None or config.model.dtype != "bfloat16":
         raise ValueError("Frozen model settings changed")
+    require(["gpu:h100"])   # ownership gate before torch is even imported
+
+    import torch
+    from transformers import AutoModelForCausalLM
+
     model = AutoModelForCausalLM.from_pretrained(
         config.model.id, revision=config.model.revision, torch_dtype=torch.bfloat16,
         attn_implementation=config.model.attention_implementation, local_files_only=True,
