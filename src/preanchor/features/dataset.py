@@ -125,12 +125,39 @@ def unit_features(head, tokenizer, config: ExperimentConfig, trajectory: dict, m
     return rows, audit
 
 
+def supersede_publication(target: Path, run_id: str, digest: str) -> dict | None:
+    """Only a smoke publication may be displaced, and only by relocation (nothing under the
+    persistent root is deleted); a canonical table with different content is never touched."""
+    if not target.is_file():
+        return None
+    if file_hash(target) == digest:
+        return {"status": "identical"}
+    audit_path = target.parent / "feature_audit.json"
+    previous = read_json(audit_path) if audit_path.is_file() else {}
+    if previous.get("extraction_stage") == "stage7":
+        raise FileExistsError(f"Canonical {target} exists with different content")
+    superseded = target.parent / "superseded" / str(previous.get("run_id") or "unknown")
+    superseded.mkdir(parents=True, exist_ok=False)
+    moved = []
+    for path in sorted(target.parent.iterdir()):
+        if path.is_file():
+            path.rename(superseded / path.name)
+            moved.append(path.name)
+    return {"status": "relocated_smoke_publication", "previous_run_id": previous.get("run_id"),
+            "previous_stage": previous.get("extraction_stage"), "moved_to": str(superseded),
+            "files": moved, "by_run_id": run_id}
+
+
 def build_dataset(run: Path, repo: Path, config: ExperimentConfig, root: Path, *,
-                  device: str | None = None, publish: bool = True, tracking: bool = True,
-                  head_loader=None, tokenizer_loader=None) -> dict:
+                  device: str | None = None, publish: bool | None = None,
+                  tracking: bool = True, head_loader=None, tokenizer_loader=None) -> dict:
     stage = features_stage(config)
     extraction = stage_name(config)
     device = device or default_device()
+    if publish is None:
+        publish = config.execution.mode == "mvp"
+    if publish and config.execution.mode != "mvp":
+        raise ValueError("Only the mvp configuration publishes to data/processed/stage7")
     with lock(run / ".run.lock"):
         manifest = check_resume(run, repo, config)
         if manifest["stages"].get(extraction, {}).get("state") != "complete":
@@ -227,12 +254,16 @@ def build_dataset(run: Path, repo: Path, config: ExperimentConfig, root: Path, *
                          "eligible_rows": int(sum(table.column("eligible").to_pylist())),
                          "anchor_rows": int(sum(table.column("anchor").to_pylist())),
                          "published": str(feature_path(root)) if publish else None,
+                         "superseded_publication": None,
                          "elapsed_seconds": time.monotonic() - started}
-                audit_digest = write_current_json(stage_dir / "feature_audit.json", audit,
-                                                  attempt)
                 if publish:
                     target = feature_path(root)
                     target.parent.mkdir(parents=True, exist_ok=True)
+                    audit["superseded_publication"] = supersede_publication(target, run.name,
+                                                                            digest)
+                audit_digest = write_current_json(stage_dir / "feature_audit.json", audit,
+                                                  attempt)
+                if publish:
                     if write_parquet(target, table) != digest:
                         raise ValueError("Published table differs from the run copy")
                     write_current_json(target.parent / "feature_audit.json", audit)

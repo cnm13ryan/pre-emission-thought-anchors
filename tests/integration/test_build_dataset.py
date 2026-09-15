@@ -71,8 +71,7 @@ def test_build_validate_and_deterministic_identity(tmp_path, config):
     assert manifest["stages"]["stage6_features"]["state"] == "complete"
     assert manifest["output_hashes"]["features/features.parquet"] == result["features_sha256"]
     table = validate_parquet(run / "features/features.parquet")
-    published = validate_parquet(feature_path(root))
-    assert published.equals(table)
+    assert not feature_path(root).exists()  # smoke configurations never publish
     rows = table.to_pylist()
     assert [r["sentence_id"] for r in rows] == [f"2189:incorrect:{i}" for i in range(6)] + \
         [f"330:correct:{i}" for i in range(6)]
@@ -94,18 +93,54 @@ def test_build_validate_and_deterministic_identity(tmp_path, config):
     report = validate_features(run, config, root, sample=5, device="cpu",
                                head_loader=head_loader, tokenizer_loader=tokenizer_loader)
     assert report["ok"] and report["rows"] == 12 and report["recomputed"]["sample"] == 5
-    assert report["published_identical"]
+    assert not report["published_identical"]
     assert (run / "features/feature_validation.json").is_file()
     # Deterministic identity: a second extraction run of the same inputs and code yields
     # byte-identical shards and a feature table that differs only in the run pointer.
     other = extract(root, config)
-    with pytest.raises(FileExistsError):
-        build(root, other, config)  # the published copy would differ in activation_run_id
-    build(root, other, config, publish=False)
+    build(root, other, config)
     again = validate_parquet(other / "features/features.parquet")
     drop = ["activation_run_id", "shard_path"]
     assert again.drop_columns(drop).equals(table.drop_columns(drop))
     assert again.column("shard_path").to_pylist() == table.column("shard_path").to_pylist()
+
+
+def test_publication_policy(tmp_path, config, monkeypatch):
+    """Only mvp publishes; a canonical table is never overwritten; a stale smoke
+    publication is relocated, never deleted."""
+    root = tmp_path / "root"
+    write_synthetic_root(root, config)
+    with pytest.raises(ValueError, match="Only the mvp configuration"):
+        build(root, extract(root, config), config, publish=True)
+    mvp = load_config(ROOT / "configs/mvp.yaml")
+    first = extract(root, mvp)
+    result = build(root, first, mvp)
+    assert load_manifest(first)["stages"]["stage7_features"]["state"] == "complete"
+    published = feature_path(root)
+    assert validate_parquet(published).equals(validate_parquet(first / "features/features.parquet"))
+    audit = read_json(published.parent / "feature_audit.json")
+    assert audit["extraction_stage"] == "stage7" and audit["superseded_publication"] is None
+    with pytest.raises(ValueError, match="Stage 7 must cover every Stage 4 row"):
+        validate_features(first, mvp, root, sample=0)  # 12 of the synthetic rows only
+    second = extract(root, mvp)
+    with pytest.raises(FileExistsError, match="Canonical"):
+        build(root, second, mvp)  # differs only in activation_run_id: still refused
+    assert validate_parquet(published).equals(validate_parquet(first / "features/features.parquet"))
+    # A legacy smoke publication (audit stage != stage7) is relocated under superseded/.
+    from preanchor.features.extract import write_current_json
+
+    write_current_json(published.parent / "feature_audit.json",
+                       {**audit, "extraction_stage": "stage6"})
+    third = extract(root, mvp)
+    result = build(root, third, mvp)
+    moved = result["audit"]["superseded_publication"]
+    assert moved["status"] == "relocated_smoke_publication"
+    assert moved["previous_run_id"] == first.name and "features.parquet" in moved["files"]
+    old = published.parent / "superseded" / first.name
+    assert validate_parquet(old / "features.parquet").equals(
+        validate_parquet(first / "features/features.parquet"))
+    assert validate_parquet(published).equals(validate_parquet(third / "features/features.parquet"))
+    assert read_json(third / "features/feature_audit.json")["superseded_publication"] == moved
 
 
 def test_tampering_is_detected(tmp_path, config):
@@ -133,10 +168,6 @@ def test_tampering_is_detected(tmp_path, config):
     from preanchor.manifest import save_manifest
 
     save_manifest(run, manifest)
-    write_current_json(run / "features/feature_audit.json", audit)
-    with pytest.raises(ValueError, match="Published feature table differs"):
-        validate_features(run, config, root, sample=0)
-    audit["published"] = None
     write_current_json(run / "features/feature_audit.json", audit)
     with pytest.raises(ValueError, match="Recomputed next_token_entropy"):
         validate_features(run, config, root, sample=12, device="cpu",
