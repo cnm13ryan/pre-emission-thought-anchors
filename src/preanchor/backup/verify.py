@@ -97,7 +97,7 @@ def verify_runs(root: Path, manifest: dict, for_stage: int, report: Report) -> d
     loaded: dict[str, dict] = {}
     for run_id, info in sorted(manifest["bundle"]["runs"].items()):
         if info["role"] == "historical" or info["stage"] not in stages | {
-                "stage5", "stage6", "stage7", "stage8", "stage9"}:
+                "stage5", "stage6", "stage7", "stage8", "stage9", "stage10"}:
             continue
         directory = root / "artifacts/runs" / run_id
         if not directory.is_dir():
@@ -559,6 +559,47 @@ def verify_stage9(root: Path, repo: Path, manifest: dict, runs: dict, report: Re
     return outcome
 
 
+def verify_stage10(root: Path, repo: Path, manifest: dict, runs: dict, report: Report) -> dict:
+    """The canonical Stage 10 run re-validates read-only against its restored Stage 9 input:
+    output hashes, train-only thresholds, frozen-site-only models, lead-one mapping and the
+    permutation record (``validate_stage10``)."""
+    from preanchor.backup.classify import stage10_run_summary
+    from preanchor.config import ExperimentConfig
+    from preanchor.probes.stage10 import validate_stage10
+
+    recorded = manifest["scientific_identity"].get("stage10") or {}
+    run_id = recorded.get("run_id")
+    outcome = {"run_id": run_id, "verified": False}
+    if not recorded or not run_id or runs.get(run_id) is None:
+        report.add("stage10_controls", "Stage 10 identity recorded and run loaded", False)
+        return outcome
+    run = root / "artifacts/runs" / run_id
+    summary = report.guard("stage10_controls", f"{run_id} Stage 10 records validate (tables, "
+                           "summary, figures)", lambda r=run: stage10_run_summary(r))
+    if not isinstance(summary, dict):
+        return outcome
+    report.add("stage10_controls", f"{run_id} outputs, Stage 9 input and freeze == bundle "
+               "identity", summary["output_hashes"] == recorded.get("output_hashes")
+               and summary["stage9_run_id"] == recorded.get("stage9_run_id")
+               and summary["freeze_sha256"] == recorded.get("freeze_sha256"))
+    config = report.guard("config_identity", f"{run_id} resolved config validates and parses "
+                          "under current code",
+                          lambda p=run / "resolved_config.yaml": (
+                              validate_artifact(p),
+                              ExperimentConfig.model_validate(read_yaml(p)))[1])
+    if not isinstance(config, ExperimentConfig):
+        return outcome
+    validated = report.guard("stage10_controls", f"{run_id} validate-sensitivities on the "
+                             "restored run (read-only)",
+                             lambda r=run, c=config: validate_stage10(r, repo, c,
+                                                                      write_record=False))
+    if isinstance(validated, dict):
+        report.add("stage10_controls", f"{run_id} validate-sensitivities ok",
+                   bool(validated["ok"]), "; ".join(validated.get("problems") or []))
+        outcome.update(verified=bool(validated["ok"]))
+    return outcome
+
+
 def verify_source(repo: Path, manifest: dict, runs: dict, for_stage: int,
                   report: Report) -> bool:
     """Is the *current* checkout the one that can continue the producing run?"""
@@ -620,6 +661,9 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
     stage9_outcome = {}
     if 9 in closure:
         stage9_outcome = verify_stage9(root, repo, manifest, runs, report)
+    stage10_outcome = {}
+    if 10 in closure:
+        stage10_outcome = verify_stage10(root, repo, manifest, runs, report)
     ready = verify_source(repo, manifest, runs, for_stage, report)
     from preanchor.backup.prepare import physical_origin
 
@@ -643,6 +687,7 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
               "reacquire": manifest["reacquire"], "stage5": outcome,
               "stage6": stage6_outcome, "stage7": stage7_outcome,
               "stage8": stage8_outcome, "stage9": stage9_outcome,
+              "stage10": stage10_outcome,
               "physical_origin": origin, "physical_destination": destination}
     receipt = write_receipt(portable, "restore_verification", {
         "bundle_id": name, "manifest_sha256": result["manifest_sha256"],

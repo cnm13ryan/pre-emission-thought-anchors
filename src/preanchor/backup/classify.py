@@ -41,7 +41,8 @@ CLASSIFICATIONS = (MUST_BACK_UP, SHOULD_BACK_UP, REACQUIRE, CACHE_EXCLUDE,
 # Stage 8 reads the Stage 7 table and shards; Stage 9 reads the Stage 8 selection and models.
 STAGE_DEPENDENCIES: dict[int, tuple[int, ...]] = {3: (), 4: (3,), 5: (3,), 6: (3, 4, 5),
                                                   7: (3, 4, 5, 6), 8: (3, 4, 5, 6, 7),
-                                                  9: (3, 4, 5, 6, 7, 8)}
+                                                  9: (3, 4, 5, 6, 7, 8),
+                                                  10: (3, 4, 5, 6, 7, 8, 9)}
 KNOWN_STAGES = tuple(sorted(STAGE_DEPENDENCIES))
 
 STAGE3_FILES = ("trajectories.parquet", "sentences.parquet")
@@ -60,6 +61,9 @@ STAGE9_OUTPUTS = ("frozen_selection.json", "metrics/analysis_registry.json",
 STAGE9_TEST_OUTPUTS = ("predictions/test.parquet", "metrics/test.json",
                        "metrics/test_receipt.json")
 STAGE7_RECORDS = ("summary.json", "resource_projection.json")
+STAGE10_OUTPUTS = ("metrics/sensitivities.parquet", "metrics/permutations.parquet",
+                   "predictions/lead_time.parquet")
+STAGE10_RECORD = "stages/stage10/summary.json"
 STAGE7_FEATURE_RECORDS = ("feature_audit.json", "feature_validation.json")
 STAGE7_PUBLISHED = ("features.parquet", "features.parquet.schema.json", "feature_audit.json")
 PILOT_TARGETS = "configs/pilot_targets_4682.yaml"
@@ -296,10 +300,11 @@ def _run_file(role: str, rel: PurePosixPath, finalized: bool) -> tuple[str, str,
         if name.endswith(".parquet"):
             return MUST_BACK_UP, "parquet", True
         return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
-    if parts[0] in ("probe_models", "predictions", "metrics") or name.startswith(
+    if parts[0] in ("probe_models", "predictions", "metrics", "figures") or name.startswith(
             "frozen_selection.json"):
-        # Stage 8 selection artifacts and Stage 9 freeze, calibrator, predictions, metrics
-        # and the test receipt: every one carries a sidecar (parquet also a schema record).
+        # Stage 8 selection artifacts, Stage 9 freeze, calibrator, predictions, metrics and
+        # the test receipt, Stage 10 sensitivity tables and figures: every one carries a
+        # sidecar (parquet also a schema record).
         if name.endswith(".parquet"):
             return MUST_BACK_UP, "parquet", True
         return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
@@ -670,6 +675,11 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
                              note_revisions=note_revisions)
     inventory.stages["stage9"] = stage9
 
+    # ---- Stage 10 (controls, sensitivities, lead time on the frozen Stage 9 run) ---
+    stage10 = discover_stage10(root, manifests, inventory, stage9, required=10 in required,
+                               note_revisions=note_revisions)
+    inventory.stages["stage10"] = stage10
+
     # ---- Provenance and evidence trees ---------------------------------------------
     collect_tree(root, "artifacts/reconstruction", MUST_BACK_UP, "provenance", inventory)
     collect_tree(root, "artifacts/amendments", MUST_BACK_UP, "provenance", inventory)
@@ -785,6 +795,8 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
         if stage8.get("status") == "complete" else {},
         "stage9": {k: v for k, v in stage9.items() if k != "status"}
         if stage9.get("status") == "complete" else {},
+        "stage10": {k: v for k, v in stage10.items() if k != "status"}
+        if stage10.get("status") == "complete" else {},
         "revisions": single, "vllm_digest": DIGEST,
         "resolved_config_hashes": {}, "scientific_config_hashes": {},
         "producing_commits": {}, "dirty_diff_hashes": {}, "lock_hashes": {}, "run_ids": []}
@@ -1218,6 +1230,87 @@ def discover_stage9(root: Path, manifests: dict[str, dict], inventory: Inventory
     inventory.runs[canonical] = {"role": "stage9_production", "stage": "stage9"}
     note_revisions(manifests[canonical])
     collect_run(root, canonical, "stage9_production", "stage9", inventory,
+                required_stage=required, finalized=True)
+    return {"status": "complete", "run_id": canonical, **summary}
+
+
+def stage10_run_summary(run: Path) -> dict:
+    """Validate a complete Stage 10 run: the three output tables and the summary record hash
+    to the manifest, and the run names its Stage 9 input by freeze hash."""
+    manifest = load_manifest(run)
+    stage = manifest["stages"].get("stage10_sensitivities") or {}
+    if stage.get("state") != "complete":
+        raise ValueError("run-sensitivities is not complete")
+    hashes = {}
+    for name in STAGE10_OUTPUTS:
+        digest = validate_artifact(run / name)
+        if manifest["output_hashes"].get(name) != digest:
+            raise ValueError(f"{name} differs from the run manifest")
+        hashes[name] = digest
+    validate_artifact(run / STAGE10_RECORD)
+    summary = read_json(run / STAGE10_RECORD)
+    if summary.get("run_id") != run.name or summary.get("output_hashes") != hashes:
+        raise ValueError("Stage 10 summary does not describe the run's outputs")
+    inputs = manifest["input_hashes"]
+    if summary.get("stage9_run_id") != inputs.get("stage9_run_id") or \
+            summary.get("freeze_sha256") != inputs.get("stage9/freeze_sha256"):
+        raise ValueError("Stage 10 summary names another Stage 9 run or freeze")
+    for name, digest in manifest["output_hashes"].items():
+        if name.startswith("figures/") and digest is not None and \
+                validate_artifact(run / name) != digest:
+            raise ValueError(f"{name} differs from the run manifest")
+    return {"stage9_run_id": inputs["stage9_run_id"],
+            "freeze_sha256": inputs["stage9/freeze_sha256"],
+            "selected": summary.get("selected"),
+            "train_thresholds": summary.get("train_thresholds"),
+            "n_units": len(summary.get("units") or []), "output_hashes": hashes,
+            "figures": {k: v for k, v in manifest["output_hashes"].items()
+                        if k.startswith("figures/")},
+            "input_hashes": dict(inputs), "code_commit": manifest["identity"]["git_sha"]}
+
+
+def discover_stage10(root: Path, manifests: dict[str, dict], inventory: Inventory,
+                     stage9: dict, *, required: bool, note_revisions) -> dict:
+    """The canonical Stage 10 run is the complete run whose inputs are exactly the canonical
+    Stage 9 run and its freeze/outputs. Incomplete or foreign runs stay historical."""
+    if stage9.get("status") != "complete" or not stage9.get("test_evaluated"):
+        if required:
+            inventory.blockers.append("Stage 10 needs a canonical, test-evaluated Stage 9 run")
+        return {"status": "absent"}
+    expected = {**stage9["input_hashes"], "stage9_run_id": stage9["run_id"],
+                "stage9/freeze_sha256": stage9["freeze_sha256"],
+                **{f"stage9/{n}": h for n, h in stage9["output_hashes"].items()}}
+    canonical: str | None = None
+    summary: dict = {}
+    for name, manifest in sorted(manifests.items()):
+        stage = manifest.get("stages", {}).get("stage10_sensitivities")
+        if not stage:
+            continue
+        if stage.get("state") != "complete":
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": f"stage10_sensitivities_{stage.get('state')}"}
+            continue
+        if manifest.get("input_hashes") != expected:
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "input_hashes_differ_from_canonical_stage9"}
+            continue
+        try:
+            candidate = stage10_run_summary(root / "artifacts/runs" / name)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            inventory.blockers.append(f"{name}: Stage 10 records invalid ({exc})")
+            continue
+        if canonical is not None:
+            inventory.blockers.append(f"{name} and {canonical} are both complete Stage 10 runs "
+                                      "on the canonical Stage 9 run; pass --run-id")
+            continue
+        canonical, summary = name, candidate
+    if canonical is None:
+        if required:
+            inventory.blockers.append("No complete Stage 10 run reads the canonical Stage 9 run")
+        return {"status": "absent"}
+    inventory.runs[canonical] = {"role": "stage10_production", "stage": "stage10"}
+    note_revisions(manifests[canonical])
+    collect_run(root, canonical, "stage10_production", "stage10", inventory,
                 required_stage=required, finalized=True)
     return {"status": "complete", "run_id": canonical, **summary}
 
