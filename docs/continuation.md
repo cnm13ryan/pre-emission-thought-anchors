@@ -271,3 +271,23 @@ for this lineage. The backup prerequisite for proceeding beyond the protected St
 state is satisfied; Stage 6 remains unauthorized until its own gates pass. Physical
 location (`8dd29228-…` virtiofs, host, MacBook path) is provenance only and is not part
 of the scientific identity of the run.
+
+## Stage 7 closure (2026-09-15, branch `codex/stage7`)
+
+SPEC Stage 7 is complete and documented in `docs/stage7_validation.md`. Branch
+`codex/stage7` was created from the `codex/stage6` merge commit `afd3714` (Stage 6
+`542ee91` plus the portable-backup work); implementation `1cfa152`, `3c2d4ec`; every Stage 7
+run executed at clean `3c2d4ec`. Production run
+`20260915T182306Z-3ab408d80a-7452f1c2`: 40 units, 6,474 rows, 3.31 GB of float16 shards,
+index `1c6c9c2f…6e5a`, feature table `f3227c38…064d` published to
+`data/processed/stage7/features.parquet` (plus `feature_audit.json`). Commands:
+`extract-activations --config configs/mvp.yaml`, `validate-activations`, `build-dataset
+--run-id <run>`, `validate-features --run-id <run>`. The Stage 5 MacBook secondary-copy
+receipt was validated with `preanchor backup verify` before launch. The `9bad4b36…`
+config hash quoted in the Stage 6 documents belongs to `configs/pilot.yaml`; `configs/mvp.yaml`
+resolves to `c8414238…`. Stage 8 has not been started. Next gates before Stage 8: a
+verified portable backup covering the Stage 7 run (the sibling session extended
+`preanchor backup` to Stage 6 on `codex/stage6`; Stage 7 classification is still to be
+added, using `STAGE_DEPENDENCIES` in `src/preanchor/backup/classify.py`), then explicit
+user authorisation. Probes read `PRIMARY_FEATURES` only and load one layer at a time from
+the shards through the `shard_path`/`row_idx` pointers of the feature table.

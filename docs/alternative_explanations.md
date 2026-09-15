@@ -19,3 +19,22 @@ token than the activation boundary sees. Any positive finding must be checked ag
 artifact: compare probe performance between space-initial and newline-initial sentences
 (the `overlapping_token` column of `activations/index.parquet`), and report whether the
 signal survives within each stratum. The frozen boundary definition is not changed.
+
+## Stage 7 dataset notes for future findings (2026-09-15)
+
+- Prefix-length and position explanations are testable directly from the table: the
+  primary features include `prefix_token_count` (61–12,356 tokens; maximum context
+  fraction 0.377) and `sentence_idx` (0–388), and the completed-length quantities exist only
+  as `diagnostic__relative_completed_trace_position`. Any activation-probe gain must be
+  reported against the position and context baselines built from these columns.
+- Uncertainty explanations: `next_token_entropy` spans 1.2e-10 to 2.90 nats and
+  `next_token_max_probability` 0.159 to 1.0 across the 6,474 boundaries, so the uncertainty
+  baseline is not degenerate; the residualised control removes these columns fold-locally.
+- Tokenisation artifact: 2,844 rows have `overlapping_token = true` (space-initial
+  sentences; see the Stage 6 entry above). The column is in the feature table for the
+  stratified comparison.
+- Numerical-precision artifact: the next-token statistics are float32 from float16-stored
+  states; a bfloat16 head changes them by up to a few hundredths (Stage 6 diagnostic). A
+  probe result that depends on that precision would be an artifact, testable by recomputing
+  the uncertainty columns with the bfloat16 head from `logit_features.parquet` of the smoke
+  runs.
