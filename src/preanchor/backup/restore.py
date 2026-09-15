@@ -30,8 +30,35 @@ def select_entries(manifest: dict, for_stage: int | None, *, required_only: bool
     return entries
 
 
+def safe_target(root: Path, rel: str) -> Path:
+    """The restore destination for a bundle entry, refusing anything that could resolve
+    outside ``root``: absolute paths, ``..``/empty/``.`` components, and symlinked
+    ancestors between ``root`` and the target."""
+    parts = Path(rel).parts
+    if Path(rel).is_absolute() or not parts or any(p in ("..", ".", "") for p in parts):
+        raise ValueError(f"unsafe bundle path {rel!r}")
+    target = root / rel
+    ancestor = target.parent
+    ancestors = []
+    while ancestor != root and root in ancestor.parents:
+        ancestors.append(ancestor)
+        ancestor = ancestor.parent
+    if ancestor != root:
+        raise ValueError(f"unsafe bundle path {rel!r}")
+    for ancestor in reversed(ancestors):
+        if ancestor.is_symlink():
+            raise ValueError(f"symlinked ancestor {ancestor} for bundle path {rel!r}")
+    resolved_root = root.resolve()
+    if target.parent.exists() and not target.parent.resolve().is_relative_to(resolved_root):
+        raise ValueError(f"bundle path {rel!r} traverses a symlink out of the root")
+    return target
+
+
 def destination_state(store: ObjectStore, root: Path, entry: dict) -> str:
-    target = root / entry["path"]
+    try:
+        target = safe_target(root, entry["path"])
+    except ValueError:
+        return "conflict"
     if target.is_symlink():
         return "conflict"
     if target.exists():
@@ -101,9 +128,13 @@ def restore_apply(root: Path, portable: Path, selector: str, *, repo: Path | Non
     per_entry: dict[str, str] = {}
     installed: list[dict] = []
     for entry in entries:
-        target = root / entry["path"]
         if dry_run:
             per_entry[entry["path"]] = destination_state(store, root, entry)
+            continue
+        try:
+            target = safe_target(root, entry["path"])
+        except ValueError as exc:
+            per_entry[entry["path"]] = f"conflict:{exc}"
             continue
         try:
             store.verify(entry["sha256"])

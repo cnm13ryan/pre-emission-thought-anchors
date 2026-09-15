@@ -64,8 +64,14 @@ def mean_cv(cv: pa.Table) -> list[dict]:
 
 
 def _best(rows: list[dict], task: str) -> dict | None:
-    """Deterministic argmax: metric, then tie-breaks (lower RMSE, smaller hp, lower layer)."""
-    candidates = [r for r in rows if r["task"] == task]
+    """Deterministic argmax: metric, then tie-breaks (lower RMSE, smaller hp, lower layer).
+    A candidate that failed to converge in any fold is not selectable: solver failure must
+    trigger a refit with a larger iteration budget, not become a model choice."""
+    all_candidates = [r for r in rows if r["task"] == task]
+    candidates = [r for r in all_candidates if r["converged"]]
+    if all_candidates and not candidates:
+        raise ValueError(f"Every {task} candidate has a nonconverged fold; refit with a "
+                         "larger max_iter instead of selecting a failed solve")
     if task == M.BINARY:
         keyed = [(-(r["average_precision"] if r["average_precision"] is not None else -math.inf),
                   r["hyperparameter"] or 0.0, r["layer"] or -1, r) for r in candidates]
