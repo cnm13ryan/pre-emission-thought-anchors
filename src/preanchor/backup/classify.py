@@ -3,7 +3,9 @@
 Canonical runs are found from manifests, output hashes and validation records on the
 filesystem, never from run IDs written into code. Runtime dependencies are traced from the
 actual consumers: Stage 4 labels read Stage 3 tables and a raw-resample run; Stage 5
-rollout identity hashes the Stage 3 tables and the frozen target mapping (``pilot.inputs``).
+rollout identity hashes the Stage 3 tables and the frozen target mapping (``pilot.inputs``);
+Stage 6 activation runs hash the Stage 3 tables and the Stage 4 labels
+(``features.extract.load_inputs``) and are the measured-fit admission evidence for Stage 7.
 """
 
 from __future__ import annotations
@@ -30,10 +32,17 @@ CLASSIFICATIONS = (MUST_BACK_UP, SHOULD_BACK_UP, REACQUIRE, CACHE_EXCLUDE,
                    HISTORICAL_EVIDENCE, SECRET)
 
 # Runtime input dependencies between canonical stages (consumer -> producers).
-STAGE_DEPENDENCIES: dict[int, tuple[int, ...]] = {3: (), 4: (3,), 5: (3,)}
+# Stage 6 reads Stage 3 and Stage 4; Stage 5 is a continuation dependency of the MVP after
+# Stage 6 (the fresh pilot is a required experiment), so a Stage 6 bundle carries it too.
+STAGE_DEPENDENCIES: dict[int, tuple[int, ...]] = {3: (), 4: (3,), 5: (3,), 6: (3, 4, 5)}
 KNOWN_STAGES = tuple(sorted(STAGE_DEPENDENCIES))
 
 STAGE3_FILES = ("trajectories.parquet", "sentences.parquet")
+STAGE6_INPUTS = ("stage3/trajectories.parquet", "stage3/sentences.parquet",
+                 "stage4/labels.parquet")
+STAGE6_RECORDS = ("summary.json", "invariance_report.json", "resource_projection.json",
+                  "boundary_audit.json")
+ACTIVATION_UNITS = PurePosixPath("activations/units")
 PILOT_TARGETS = "configs/pilot_targets_4682.yaml"
 UNIT_NAMESPACES = {"units", "units_raw", "benchmark_units", "benchmark_units_raw"}
 LIVE_STATES = {"prepared", "running", "stopped"}
@@ -116,6 +125,14 @@ def secret_reason(path: Path, logical: str) -> str | None:
     return None
 
 
+def stage6_input_hashes(root: Path) -> dict[str, str] | None:
+    """The exact keys ``features.extract.load_inputs`` records in every Stage 6 run."""
+    processed = root / "data/processed"
+    if not all((processed / name).is_file() for name in STAGE6_INPUTS):
+        return None
+    return {name: file_hash(processed / name) for name in STAGE6_INPUTS}
+
+
 def stage3_hashes(root: Path, repo: Path) -> dict[str, str] | None:
     """The exact keys ``pilot.inputs`` hashes into every Stage 5 rollout ID."""
     base = root / "data/processed/stage3"
@@ -159,6 +176,8 @@ def _run_files(run: Path):
         rel = Path(directory).relative_to(run)
         if len(rel.parts) == 2 and rel.parts[0] == "stages":
             subdirs[:] = [d for d in subdirs if d not in UNIT_NAMESPACES]
+        if rel.parts == ("activations",):
+            subdirs[:] = [d for d in subdirs if d != "units"]
         for name in names:
             yield Path(directory) / name
 
@@ -248,6 +267,10 @@ def _run_file(role: str, rel: PurePosixPath, finalized: bool) -> tuple[str, str,
         return SHOULD_BACK_UP, "bytes", False
     if parts[0] in ("environment", "logs"):
         return SHOULD_BACK_UP, "bytes", False
+    if parts[0] == "activations":
+        if name.endswith(".parquet"):
+            return MUST_BACK_UP, "parquet", True
+        return MUST_BACK_UP, "bytes" if sidecar else "sha256_sidecar", True
     if parts[0] == "stages" and len(parts) >= 3:
         rest = parts[2:]
         if rest[0] in ("progress.json", "telemetry.json", "startup.log", "telemetry",
@@ -294,9 +317,11 @@ def collect_run(root: Path, run_id: str, role: str, stage: str, inventory: Inven
         classification, validation, required = decision
         inventory.add(Entry(logical, classification, stage, required and required_stage,
                             validation, run_id=run_id, size=path.stat().st_size))
-    for namespace_dir in sorted(run.glob("stages/*/*")):
-        if namespace_dir.name not in UNIT_NAMESPACES or not namespace_dir.is_dir():
-            continue
+    namespaces = [d for d in sorted(run.glob("stages/*/*"))
+                  if d.name in UNIT_NAMESPACES and d.is_dir()]
+    if (run / ACTIVATION_UNITS).is_dir():
+        namespaces.append(run / ACTIVATION_UNITS)
+    for namespace_dir in namespaces:
         namespace_logical = f"artifacts/runs/{run_id}/{namespace_dir.relative_to(run).as_posix()}"
         if role in ("stage2", "stage4_raw", "historical"):
             measured = _manifest_bytes(namespace_dir.parent) if measure_excluded is False \
@@ -591,6 +616,11 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
                if unreadable else ""))
     inventory.stages["stage5"] = stage5
 
+    # ---- Stage 6 (activation-extraction smoke: Stage 7 admission evidence) ---------
+    stage6 = discover_stage6(root, manifests, inventory, required=6 in required,
+                             note_revisions=note_revisions)
+    inventory.stages["stage6"] = stage6
+
     # ---- Provenance and evidence trees ---------------------------------------------
     collect_tree(root, "artifacts/reconstruction", MUST_BACK_UP, "provenance", inventory)
     collect_tree(root, "artifacts/amendments", MUST_BACK_UP, "provenance", inventory)
@@ -698,6 +728,8 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
         "stage5": {k: stage5.get(k) for k in ("run_id", "input_hashes", "plan_sha256",
                                               "rollout_id_set_sha256", "frozen",
                                               "benchmark_run_ids")} if production else {},
+        "stage6": {k: v for k, v in stage6.items() if k != "status"}
+        if stage6.get("status") == "complete" else {},
         "revisions": single, "vllm_digest": DIGEST,
         "resolved_config_hashes": {}, "scientific_config_hashes": {},
         "producing_commits": {}, "dirty_diff_hashes": {}, "lock_hashes": {}, "run_ids": []}
@@ -720,6 +752,85 @@ def discover(root: Path, repo: Path, *, for_stage: int, run_id: str | None = Non
         identity["upstream"] = {}
     inventory.scientific_identity = identity
     return inventory
+
+
+def stage6_run_summary(run: Path) -> dict:
+    """Validate the records a completed Stage 6 run must carry and extract its identity."""
+    stage = run / "stages/stage6"
+    for name in STAGE6_RECORDS:
+        validate_artifact(stage / name)
+    summary = read_json(stage / "summary.json")
+    report = read_json(stage / "invariance_report.json")
+    projection = read_json(stage / "resource_projection.json")
+    index = validate_parquet(run / "activations/index.parquet")
+    units = {u["unit_key"]: u for u in summary["units"]}
+    if index.num_rows != summary["n_rows"] or len(units) != summary["n_units"]:
+        raise ValueError("index rows or unit count differ from summary.json")
+    keys = {p.split("/")[1] for p in index.column("shard_path").to_pylist()}
+    if keys != set(units):
+        raise ValueError("index shard paths do not match the summary's units")
+    if not report.get("primary_pass") or not report.get("logit_identity_pass"):
+        raise ValueError("invariance report does not pass the primary gate")
+    return {"n_units": summary["n_units"], "n_rows": summary["n_rows"],
+            "trajectories": sorted(u["trajectory_id"] for u in units.values()),
+            "index_sha256": summary["index_sha256"],
+            "shard_sha256": {u["trajectory_id"]: u["shard_sha256"] for u in units.values()},
+            "unit_keys": sorted(units), "activation_site": summary["activation_site"],
+            "n_layers": summary["architecture"]["n_layers"],
+            "d_model": summary["architecture"]["d_model"],
+            "invariance": {k: report.get(k) for k in ("primary_pass", "logit_identity_pass",
+                                                      "n_boundaries", "diagnostic_max_abs",
+                                                      "diagnostic_within_atol", "atol")},
+            "projection": {k: projection.get(k) for k in ("stage", "unit_count", "row_count",
+                                                          "token_count", "projected_seconds",
+                                                          "projected_bytes", "code_commit")}}
+
+
+def discover_stage6(root: Path, manifests: dict[str, dict], inventory: Inventory, *,
+                    required: bool, note_revisions) -> dict:
+    """Every complete Stage 6 run whose recorded inputs are the current Stage 3/4 tables is
+    canonical admission evidence; incomplete or stale runs stay historical."""
+    expected = stage6_input_hashes(root)
+    runs: dict[str, dict] = {}
+    for name, manifest in sorted(manifests.items()):
+        stage = manifest.get("stages", {}).get("stage6")
+        if not stage:
+            continue
+        if stage.get("state") != "complete":
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": f"stage6_state_{stage.get('state')}"}
+            continue
+        if expected is None or manifest.get("input_hashes") != expected:
+            inventory.runs[name] = {"role": "historical", "stage": "evidence",
+                                    "reason": "input_hashes_differ_from_current_stage3_4"}
+            continue
+        run = root / "artifacts/runs" / name
+        try:
+            summary = stage6_run_summary(run)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            inventory.blockers.append(f"{name}: Stage 6 records invalid ({exc})")
+            continue
+        if sorted(stage.get("trajectories") or []) != summary["trajectories"] \
+                or summary["n_rows"] != stage.get("n_rows"):
+            inventory.blockers.append(f"{name}: Stage 6 outputs differ from the prepared scope")
+            continue
+        inventory.runs[name] = {"role": "stage6_smoke", "stage": "stage6"}
+        note_revisions(manifest)
+        counts = collect_run(root, name, "stage6_smoke", "stage6", inventory,
+                             required_stage=required, finalized=True,
+                             expected_units=set(summary["unit_keys"]))
+        if counts["valid_units"] != summary["n_units"]:
+            inventory.blockers.append(f"{name}: {summary['n_units'] - counts['valid_units']} "
+                                      "activation units are missing or invalid")
+        runs[name] = summary
+    if not runs:
+        if required:
+            inventory.blockers.append("No complete Stage 6 run matches the current Stage 3/4 "
+                                      "tables (activation smoke admission evidence)")
+        return {"status": "absent"}
+    return {"status": "complete", "run_ids": sorted(runs), "input_hashes": expected,
+            "runs": runs, "total_rows": sum(r["n_rows"] for r in runs.values()),
+            "total_units": sum(r["n_units"] for r in runs.values())}
 
 
 def highest_protected_stage(inventory: Inventory) -> int | None:

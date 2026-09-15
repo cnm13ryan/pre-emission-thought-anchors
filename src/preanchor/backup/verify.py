@@ -96,7 +96,7 @@ def verify_runs(root: Path, manifest: dict, for_stage: int, report: Report) -> d
     stages = {f"stage{s}" for s in stage_closure(for_stage)}
     loaded: dict[str, dict] = {}
     for run_id, info in sorted(manifest["bundle"]["runs"].items()):
-        if info["role"] == "historical" or info["stage"] not in stages | {"stage5"}:
+        if info["role"] == "historical" or info["stage"] not in stages | {"stage5", "stage6"}:
             continue
         directory = root / "artifacts/runs" / run_id
         if not directory.is_dir():
@@ -308,13 +308,88 @@ def verify_stage5(root: Path, repo: Path, manifest: dict, runs: dict, stage3: di
     return outcome
 
 
+def verify_stage6(root: Path, manifest: dict, runs: dict, stage3: dict | None,
+                  report: Report) -> dict:
+    """Stage 7 admission evidence: every canonical Stage 6 run re-validates on the restored
+    bytes, consumed exactly the restored Stage 3/4 tables, and still passes the primary
+    invariance gate. Nothing here starts Stage 7."""
+    from preanchor.backup.classify import STAGE6_INPUTS, stage6_run_summary
+    from preanchor.config import ExperimentConfig
+    from preanchor.features.extract import validate_run
+
+    recorded = manifest["scientific_identity"].get("stage6") or {}
+    outcome = {"run_ids": recorded.get("run_ids") or [], "verified_runs": []}
+    if not recorded:
+        report.add("stage6_admission", "Stage 6 identity recorded", False)
+        return outcome
+    processed = root / "data/processed"
+    current = {name: file_hash(processed / name) for name in STAGE6_INPUTS
+               if (processed / name).is_file()}
+    report.add("input_identity", "restored Stage 3/4 tables hash to the Stage 6 input identity",
+               current == recorded.get("input_hashes"),
+               "" if current == recorded.get("input_hashes") else f"{current}")
+    traces = {}
+    if (processed / "stage3/trajectories.parquet").is_file():
+        table = validate_parquet(processed / "stage3/trajectories.parquet")
+        traces = dict(zip(table.column("trajectory_id").to_pylist(),
+                          table.column("full_cot_sha256").to_pylist(), strict=True))
+    for run_id in outcome["run_ids"]:
+        run_manifest = runs.get(run_id)
+        run = root / "artifacts/runs" / run_id
+        if run_manifest is None:
+            report.add("stage6_admission", f"{run_id} loaded", False)
+            continue
+        expected = (recorded.get("runs") or {}).get(run_id) or {}
+        report.add("input_identity", f"{run_id} consumed the restored Stage 3/4 tables",
+                   run_manifest.get("input_hashes") == current)
+        summary = report.guard("stage6_admission", f"{run_id} Stage 6 records validate "
+                               "(summary, invariance report, projection, audit, index)",
+                               lambda r=run: stage6_run_summary(r))
+        if not isinstance(summary, dict):
+            continue
+        report.add("stage6_admission", f"{run_id} index, shard hashes and rows == bundle identity",
+                   summary["index_sha256"] == expected.get("index_sha256")
+                   and summary["shard_sha256"] == expected.get("shard_sha256")
+                   and summary["n_rows"] == expected.get("n_rows"))
+        report.add("stage6_admission", f"{run_id} primary invariance gate (same-shape mutation)"
+                   " and logit identity pass", bool(summary["invariance"]["primary_pass"])
+                   and bool(summary["invariance"]["logit_identity_pass"]),
+                   json.dumps(summary["invariance"]))
+        report.add("stage6_admission", f"{run_id} activation site and dimensions == bundle "
+                   "identity", summary["activation_site"] == "block_post_pre_final_norm"
+                   and summary["n_layers"] == expected.get("n_layers")
+                   and summary["d_model"] == expected.get("d_model"),
+                   f"{summary['activation_site']} {summary['n_layers']}+1 x {summary['d_model']}")
+        resolved_path = run / "resolved_config.yaml"
+        config = report.guard("config_identity", f"{run_id} resolved config validates and "
+                              "parses under current code",
+                              lambda p=resolved_path: (validate_artifact(p),
+                                                       ExperimentConfig.model_validate(
+                                                           read_yaml(p)))[1])
+        if not isinstance(config, ExperimentConfig):
+            continue
+        report.add("config_identity", f"{run_id} resolved-config hash == run identity",
+                   config.resolved_hash() == run_manifest["identity"]["resolved_config_hash"])
+        validated = report.guard("unit_integrity", f"{run_id} validate-activations on restored "
+                                 "units and index", lambda r=run, c=config: validate_run(r, c))
+        if isinstance(validated, dict):
+            index = validate_parquet(run / "activations/index.parquet").to_pylist()
+            report.add("input_identity", f"{run_id} index trace hashes == restored Stage 3 "
+                       "traces and labels hash == restored Stage 4 labels",
+                       all(traces.get(r["trajectory_id"]) == r["trace_sha256"]
+                           and r["labels_sha256"] == current.get("stage4/labels.parquet")
+                           for r in index))
+            outcome["verified_runs"].append(run_id)
+    return outcome
+
+
 def verify_source(repo: Path, manifest: dict, runs: dict, for_stage: int,
                   report: Report) -> bool:
     """Is the *current* checkout the one that can continue the producing run?"""
     identity = manifest["scientific_identity"]
     stage_runs = [r for r, info in manifest["bundle"]["runs"].items()
                   if info["stage"] == f"stage{for_stage}" and info["role"].endswith(
-                      ("production", "build")) and r in runs]
+                      ("production", "build", "smoke")) and r in runs]
     try:
         source, _ = run_manifests.provenance(repo)
     except (ValueError, OSError) as exc:
@@ -357,6 +432,9 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
     outcome = {}
     if 5 in closure:
         outcome = verify_stage5(root, repo, manifest, runs, stage3, report)
+    stage6_outcome = {}
+    if 6 in closure:
+        stage6_outcome = verify_stage6(root, manifest, runs, stage3, report)
     ready = verify_source(repo, manifest, runs, for_stage, report)
     from preanchor.backup.prepare import physical_origin
 
@@ -378,6 +456,7 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
                   "checkout must equal the producing commit with a clean tree and the "
                   "same uv.lock (check_resume)" if not ready else "checkout matches"),
               "reacquire": manifest["reacquire"], "stage5": outcome,
+              "stage6": stage6_outcome,
               "physical_origin": origin, "physical_destination": destination}
     receipt = write_receipt(portable, "restore_verification", {
         "bundle_id": name, "manifest_sha256": result["manifest_sha256"],

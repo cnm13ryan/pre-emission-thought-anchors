@@ -90,3 +90,69 @@ def make_world(root: Path, monkeypatch, **kwargs) -> tuple[Path, list]:
     fake_provenance(monkeypatch)
     write_stage3(root)
     return make_production(root, **kwargs)
+
+
+def make_stage6(root: Path, *, trajectories=("330:correct", "2189:incorrect"),
+                limit: int = 4) -> Path:
+    """A real Stage 6 run (tiny Qwen2, character tokenizer) laid out by ``features.extract``.
+
+    Requires ``write_synthetic_root`` (40 synthetic trajectories plus Stage 4 labels)."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tests/fixtures"))
+    from tiny_qwen2 import tiny_loader
+
+    from preanchor.features.extract import execute, load_inputs, prepare, select_work
+
+    config = load_config(ROOT / "configs/smoke.yaml")
+    inputs, hashes = load_inputs(root)
+    work = select_work(config, inputs, list(trajectories), limit)
+    run = prepare(root, ROOT, config, "fixture", work, hashes)
+    execute(run, ROOT, config, trajectories=list(trajectories), limit_sentences=limit,
+            tracking=False, loader=tiny_loader)
+    return run
+
+
+def make_stage4_runs(root: Path) -> tuple[Path, Path]:
+    """Provenance-only Stage 4 raw and build runs shaped like ``labels.stage4`` records them,
+    publishing the synthetic ``data/processed/stage4/labels.parquet``."""
+    from preanchor.ids import file_hash
+
+    config = load_config(ROOT / "configs/mvp.yaml")
+    raw = create_run(root, ROOT, config, ["preanchor fetch-raw-resamples"])
+    digest = write_json(raw / "stages/stage4_raw/source_manifest.json",
+                        {"schema_version": 1, "files": []})
+    manifest = load_manifest(raw)
+    manifest["input_hashes"] = {"raw_discovery": "r" * 64}
+    manifest["identity"]["input_hashes"] = manifest["input_hashes"]
+    manifest["output_hashes"]["stage4_raw_source_manifest"] = digest
+    manifest["stages"]["stage4_raw"] = {"state": "complete", "attempt": "x", "limit": None}
+    save_manifest(raw, manifest)
+    build = create_run(root, ROOT, config, ["preanchor build-labels"])
+    base = root / "data/processed"
+    manifest = load_manifest(build)
+    manifest["input_hashes"] = {
+        "stage3_trajectories": file_hash(base / "stage3/trajectories.parquet"),
+        "stage3_sentences": file_hash(base / "stage3/sentences.parquet"),
+        "raw_run_id": raw.name, "raw_source_manifest": digest}
+    manifest["identity"]["input_hashes"] = manifest["input_hashes"]
+    manifest["output_hashes"]["stage4_labels"] = file_hash(base / "stage4/labels.parquet")
+    manifest["stages"]["stage4_labels"] = {"state": "complete"}
+    save_manifest(build, manifest)
+    return raw, build
+
+
+def make_stage6_world(root: Path, monkeypatch, *, stage5_units: int = 256, **kwargs):
+    """Stage 3/4 synthetic tables, a finalized-looking Stage 5 production run and a complete
+    Stage 6 smoke run: the full ``--for-stage 6`` closure without GPU or network."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tests/fixtures"))
+    from tiny_qwen2 import write_synthetic_root
+
+    fake_provenance(monkeypatch)
+    write_synthetic_root(root, load_config(ROOT / "configs/mvp.yaml"))
+    make_stage4_runs(root)
+    production, specs = make_production(root, units=stage5_units)
+    stage6 = make_stage6(root, **kwargs)
+    return production, specs, stage6
