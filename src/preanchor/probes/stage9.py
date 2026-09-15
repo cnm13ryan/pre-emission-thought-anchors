@@ -692,9 +692,11 @@ def evaluate_test(run: Path, repo: Path, config: ExperimentConfig, confirm: str)
 # --------------------------------------------------------------------------- validation
 
 
-def validate_stage9(run: Path, repo: Path, config: ExperimentConfig) -> dict:
-    """Read-only re-check of a Stage 9 run. ``ok`` is false, with reasons, when any frozen
-    identity no longer verifies (the run is then invalid: SPEC Stage 9 failure/recovery)."""
+def validate_stage9(run: Path, repo: Path, config: ExperimentConfig, *,
+                    write_record: bool = True) -> dict:
+    """Re-check of a Stage 9 run. ``ok`` is false, with reasons, when any frozen identity no
+    longer verifies (the run is then invalid: SPEC Stage 9 failure/recovery).
+    ``write_record=False`` keeps it strictly read-only (restore verification)."""
     manifest = load_manifest(run)
     report = {"schema_version": 1, "run_id": run.name, "ok": True, "problems": [],
               "validated_at": utc_now()}
@@ -708,7 +710,8 @@ def validate_stage9(run: Path, repo: Path, config: ExperimentConfig) -> dict:
     except TestLockError as exc:
         fail(str(exc))
         report["frozen"] = False
-        write_current_json(run / "stages" / STAGE / "validation.json", report)
+        if write_record:
+            write_current_json(run / "stages" / STAGE / "validation.json", report)
         return report
     report.update({"frozen": True, "freeze_sha256": freeze_sha,
                    "calibration_fitted": frozen["calibration"]["fitted"],
@@ -770,5 +773,6 @@ def validate_stage9(run: Path, repo: Path, config: ExperimentConfig) -> dict:
                                   "metrics_sha256": receipt["metrics_sha256"]}
     elif state["claimed"]:
         report["test_summary"] = {"interrupted_claim": True, "attempts": len(state["attempts"])}
-    write_current_json(run / "stages" / STAGE / "validation.json", report)
+    if write_record:
+        write_current_json(run / "stages" / STAGE / "validation.json", report)
     return report

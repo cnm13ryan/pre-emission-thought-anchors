@@ -33,7 +33,8 @@ def relabel(root: Path) -> None:
     rows = table.to_pylist()
     for r in rows:
         r["anchor"] = r["sentence_idx"] in ANCHORS
-        r["importance_primary"] = 0.05 * r["sentence_idx"] + (1.0 if r["anchor"] else 0.0)
+        # Non-anchors stay below the 0.5 synthetic threshold for every eligible index.
+        r["importance_primary"] = 0.02 * r["sentence_idx"] + (1.0 if r["anchor"] else 0.0)
         r["importance_log1p"] = math.log1p(r["importance_primary"])
     for suffix in ("", ".sha256", ".schema.json", ".schema.json.sha256"):
         Path(str(path) + suffix).unlink()
