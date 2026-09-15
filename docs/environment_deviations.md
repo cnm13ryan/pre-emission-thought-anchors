@@ -54,3 +54,15 @@ A100-SXM4-40GB (driver 580.105.08). The earlier failure was an execution-context
 restriction, not a host driver failure. No driver, CUDA toolkit or GPU class changed.
 Production `preanchor doctor` passed with torch `2.7.0+cu126`; the Stage 6 measured model
 fit gate remains unrun and GPU workloads remain paused by user instruction.
+
+## 2026-09-15 A6000 environment collector
+
+Pinned torch 2.7.0+cu126 passes actual BF16 kernel admission. Native
+`python -m torch.utils.collect_env` crashes in `get_pip_packages`: uv's locked
+virtual environment has no pip, so torch calls `.splitlines()` on None. Preserve
+the native command's stdout/stderr, then run the same collector with only package
+enumeration supplied by `importlib.metadata`. All GPU/driver/CUDA probes remain
+native torch code; no installed library, driver, CUDA or uv.lock is changed.
+Both lock hashes are therefore identical. Package provenance is independently
+captured in every manifest and environment/packages.json. Alternative rejected:
+installing an unneeded, unpinned pip or hiding the collector failure.
