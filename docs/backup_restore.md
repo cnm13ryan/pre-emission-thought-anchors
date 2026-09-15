@@ -1,0 +1,174 @@
+# Backup and restore SOP (portable, content-addressed)
+
+Routine commands first. Everything below the first section is reference.
+
+## Routine
+
+On the MacBook, after every canonical stage completes (and any time before a Lambda
+filesystem might be lost):
+
+```bash
+./scripts/preanchor_portable.sh backup <ssh-host> --for-stage 5      # plan, prepare, pull, verify
+./scripts/preanchor_portable.sh list                                  # what is verified locally
+./scripts/preanchor_portable.sh verify                                # rehash the local copy
+```
+
+Before terminating a Lambda instance whose persistent filesystem you may never mount
+again: run the `backup` command above and require the literal line `BACKUP VERIFIED` and a
+`pull_verification` receipt under `~/preanchor-backups/portable/receipts/`. Nothing else
+counts. A bundle prepared on Lambda (`preanchor backup prepare`) is primary-only.
+
+Onto a fresh persistent filesystem in a new region (new UUID, host, GPU, mount path):
+
+```bash
+# new Lambda instance
+git clone <repo> ~/preanchor-repo && cd ~/preanchor-repo && git checkout <producing commit>
+# recreate .env by hand (secrets are never in a bundle); set PREANCHOR_ROOT and the hourly rate
+bash scripts/bootstrap_remote.sh
+
+# MacBook
+./scripts/preanchor_portable.sh restore <new-ssh-host> --for-stage 5
+```
+
+The restore ends with `RESTORE VERIFIED`, `Scientifically equivalent portable state: PASS`
+and `Ready to continue Stage 5: YES|NO`. `NO` means the checkout is not the producing
+commit (or is dirty / has another `uv.lock`): check out that commit and rerun
+`uv run --frozen preanchor restore verify --bundle <id> --for-stage 5`.
+
+Lambda-side equivalents (all read-only except `prepare`/`apply`):
+
+```bash
+uv run --frozen preanchor backup plan --for-stage 5
+uv run --frozen preanchor backup prepare --for-stage 5
+uv run --frozen preanchor backup verify --bundle latest
+uv run --frozen preanchor backup list
+uv run --frozen preanchor backup import-legacy artifacts/backups/<legacy-snapshot>
+uv run --frozen preanchor restore plan  --bundle <id> --for-stage 5
+uv run --frozen preanchor restore apply --bundle <id> --for-stage 5 [--dry-run]
+uv run --frozen preanchor restore verify --bundle <id> --for-stage 5
+```
+
+`--root` overrides `PREANCHOR_ROOT` (used for scratch restores such as
+`/lambda/nfs/preanchor/restore-test`); `--store` points at another portable store.
+
+## What is backed up
+
+The store lives at `$PREANCHOR_ROOT/artifacts/portable/` and the MacBook mirror at
+`~/preanchor-backups/portable/`:
+
+```text
+objects/sha256/<aa>/<bb>/<sha256>     one immutable payload per distinct content
+manifests/<UTC>-<manifest-sha256>.json (+ .sha256)   immutable bundle manifests
+receipts/<UTC>-<kind>-<sha12>-<rand>.json            append-only receipts
+latest.json                           replaceable pointer to the newest manifest
+```
+
+Classification (`preanchor.backup.classify`) is derived from manifests and validation
+records on the filesystem, never from run IDs in code:
+
+| Class | Content | Bundled |
+| --- | --- | --- |
+| `MUST_BACK_UP` | `data/processed/stage3/**`, `data/processed/stage4/**`, the Stage 4 build run (labels, audit, summaries, manifests), Stage 4 raw-run provenance (manifest revisions, `source_manifest.json`, `SUCCESS.json`, attempts, config, patch) without its units, the Stage 5 production run (manifests, resolved config, patch, plan, tokenizer validation, runtime admission, projections, doctor, summary, `units_raw/**`, `units/**`, base validation, fresh labels) and the benchmark runs its projection cites, `artifacts/reconstruction/**`, `artifacts/amendments/**` | yes, exact bytes |
+| `SHOULD_BACK_UP` | heartbeat, progress, telemetry, startup and admission logs, W&B offline files, environment captures, doctor evidence, live-checkpoint indexes, Stage 2 run metadata | yes |
+| `REACQUIRE` | Stage 2 dataset payload, Stage 4 raw resample payload, DeepSeek weights and tokenizer, MiniLM, the vLLM image | no; the pin (revision, digest, source-manifest hash) is recorded in the manifest |
+| `CACHE_EXCLUDE` | `cache/**`, `.venv`, Docker layers, `.locks`, `quarantine`, partial units, `.run.lock`, `artifacts/portable` itself, primary-only `stage5-live-*/run` copies | no |
+| `HISTORICAL_EVIDENCE` | failed, superseded and non-dependency runs, legacy snapshots | only with `--include-historical` or `import-legacy` |
+| `SECRET` | `.env*`, credentials, keys, any file whose content looks like a token | never; a secret inside a run blocks `prepare` |
+
+Stage dependencies used for `--for-stage`: Stage 4 consumes Stage 3; Stage 5 consumes
+Stage 3 and `configs/pilot_targets_4682.yaml` (its rollout IDs hash both). A bundle for
+stage N carries every completed canonical stage up to N; the transitive dependencies are
+flagged `required`.
+
+## Why exact bytes
+
+Canonical derived artifacts are not byte-reproducible: Stage 3 `trajectories.parquet`
+embeds the absolute Stage 2 `source_path`, Stage 4 MiniLM cosine scores differ between
+GPU generations, and the Stage 3 hashes feed `manifest.input_hashes` and every Stage 5
+rollout ID. The 2026-09-15 cross-region reconstruction reproduced equivalent science with
+different hashes and therefore a different production plan. Restoring exact bytes is the
+only way to continue a run rather than restart it.
+
+## Incremental behaviour
+
+Identity is SHA-256, never mtime. Preparing the same state twice adds zero objects and one
+new manifest; new completions add exactly their files. The MacBook pulls only objects it
+does not have (`rsync -a --ignore-existing --files-from=<manifest object list>`), then
+rehashes every object the manifest references and checks the manifest against its own
+name and sidecar. Only then does it write the `pull_verification` receipt and print
+`BACKUP VERIFIED`; the receipt is copied back to Lambda over the same Mac-initiated
+connection. Old objects and manifests are never deleted by the tooling.
+
+## Live Stage 5 checkpoints
+
+`backup prepare` on a running production run produces a `live_checkpoint` bundle:
+only units with a valid `SUCCESS.json` (checked with `UnitStore.validate`) are ingested,
+partial and corrupt units are excluded, and the manifest records
+`stage5.status: running`, `protected_completed_units`, `resumable` and
+`finalized: false`. `highest_protected_stage` stays below 5. The existing 15-minute
+primary checkpoint (`pilot.checkpoint`) is unchanged. After `finalize`, a normal
+`backup` produces the canonical bundle; the units already protected are reused.
+
+## Scientific versus physical identity
+
+`scientific_identity` in the manifest holds resolved/scientific config hashes, producing
+commits, dirty-diff and `uv.lock` hashes, submodule revisions, model/tokenizer/dataset/
+MiniLM revisions, the vLLM digest, Stage 3 hashes, Stage 4 label hash and fingerprint,
+run IDs, the Stage 5 input hashes, plan hash, sorted rollout-ID-set hash and the frozen
+generation settings. `physical_origin` (root path, mount source, filesystem type, host,
+GPU, region) is provenance only; `restore verify` prints origin and destination and never
+compares them. Run IDs, manifest revision chains and the recorded origin are preserved on
+restore; the new destination is written to the restore receipts.
+
+`restore verify --for-stage 5` recomputes `pilot.inputs` on the restored Stage 3 tables,
+compares the hashes with `manifest.input_hashes`, recomputes `production_specs()` and
+requires its sorted rollout IDs to equal the plan exactly, validates every unit with
+`UnitStore.validate`, checks `units_raw` against the plan, and checks the frozen settings
+(temperature 0.6, top_p 0.95, max_new_tokens 16384, seed_root 20260914,
+add_special_tokens false, dtype bfloat16, max_model_len 20480, no chat template, no
+quantization) plus the pinned revisions and vLLM digest.
+
+## Reacquiring caches
+
+Nothing reacquirable is needed for identity. To continue work:
+
+```bash
+scripts/start_vllm.sh configs/lambda/<profile>.yaml     # pulls the pinned image by digest
+uv run --frozen preanchor fetch --run-id ...             # Stage 2 payload (pinned dataset rev)
+uv run --frozen preanchor fetch-raw-resamples ...        # Stage 4 raw payload; validate with
+uv run --frozen preanchor validate-raw-resamples --no-require-identity
+```
+
+Model, tokenizer and MiniLM snapshots download on first use at the pinned revisions. Each
+manifest's `reacquire` list names the resource, pin and source of the pin.
+
+## Failure handling
+
+* `backup plan` exits 2 with `BLOCKERS` when required state is absent, a checksum sidecar
+  or Parquet schema mismatches, a run manifest's current view differs from its immutable
+  revision, a unit is corrupt or outside the plan, or a credential is found.
+* `backup prepare` refuses to run with blockers, never regenerates missing artifacts,
+  never overwrites a different object under the same name, and never deletes.
+* `restore apply` records per entry `restored`, `already_present_identical`, `missing`,
+  `mismatch`, `conflict` (destination holds different bytes; never overwritten) or
+  `validation_failed`, writes a `restore` receipt with `outcome: failed` and exits 1 on any
+  non-success. Completed entries stay in place; rerunning is idempotent.
+* `restore verify` fails on any changed byte in a required entry, a changed Stage 3 hash,
+  a rollout-ID difference or a frozen-setting difference.
+* The MacBook script exits non-zero on any rsync, hash or manifest error and never prints
+  `BACKUP VERIFIED` in that case.
+
+## Legacy snapshots
+
+`scripts/prepare_bootstrap_backup.py`, `prepare_stage1_backup.py`,
+`prepare_stage2_backup.py` and `scripts/pull_artifacts.sh` keep working unchanged.
+`preanchor backup import-legacy <snapshot-dir>` rehashes every `checksums.json` entry
+first and only then stores the payloads as a `legacy_import` bundle under
+`legacy/<snapshot>/...`. Whether an older MacBook snapshot exists is established only by
+inspecting `~/preanchor-backups/` on the MacBook or by a receipt, never assumed.
+
+## Listing and inspecting
+
+`preanchor backup list` shows the store, the `latest.json` pointer, every manifest (kind,
+stage, protected stage, entry count, logical bytes) and receipts. Manifests are plain
+canonical JSON; `preanchor backup verify --bundle <id>` rehashes their objects.

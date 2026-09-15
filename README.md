@@ -53,6 +53,9 @@ uv run --frozen preanchor --help
 Fill `HF_TOKEN`, `WANDB_API_KEY` and the backup/cost fields in `.env` before stages that
 need them. Long jobs still run in tmux per `docs/lambda_runbook.md`.
 
+Canonical state is protected with `./scripts/preanchor_portable.sh backup <ssh-host>
+--for-stage <N>` from the MacBook; see `docs/backup_restore.md` for the SOP and restore.
+
 ## Bootstrap (manual steps)
 
 The script above performs these; they remain documented for reference.

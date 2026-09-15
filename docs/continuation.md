@@ -180,9 +180,13 @@ sessions closed. All A6000 measurements are in `docs/stage5_measurements.md`.
 State at hand-off (repo at the commit introducing this entry; PR #1 merged into `main`
 as 6ee01ed):
 
-- Persistent root `/lambda/nfs/preanchor/preanchor` on Lambda filesystem UUID
-  `63166b57-881d-4c14-8d52-3c71802fd86b` (68 GB used: artifacts 20 GB, cache 48 GB,
-  data 2.7 MB). The H100 must be launched in the same region to mount it.
+- Persistent root `/lambda/nfs/preanchor/preanchor` was, at that hand-off, Lambda
+  filesystem UUID `63166b57-881d-4c14-8d52-3c71802fd86b` (68 GB used: artifacts 20 GB,
+  cache 48 GB, data 2.7 MB). Superseded: the H100 was launched in another region, that
+  filesystem was not mountable, and the state was reconstructed on
+  `8dd29228-2370-430d-836b-a3e9de7cc148` (see `artifacts/reconstruction/`). A future
+  filesystem never has to preserve an old UUID: restore the portable bundle instead
+  (`docs/backup_restore.md`).
 - Canonical Stage 4: run `20260915T120136Z-b1a2dd9ab0-3b77595c`
   (`labels.parquet` SHA-256 `2049a33f…163d763`), raw run `20260915T113709Z-734a9a5a41-5c37eb5c`.
 - `.env` is untracked and holds secrets plus `PREANCHOR_HOURLY_RATE`; set the rate to the
@@ -205,3 +209,21 @@ The runner is named `a6000` but is hardware-agnostic: it reads the GPU, KV capac
 throughput from the live server and the startup log, and the selection rule, truncation gate
 (5%), and stop rules (10 h / $20) apply unchanged. Use the H100 profile's concurrency values
 as candidate benchmarks; the frozen sampling settings do not change.
+
+## Portable backup and cross-region restore (2026-09-15)
+
+`preanchor backup`/`preanchor restore` and `scripts/preanchor_portable.sh` replace the
+per-stage snapshot scripts for all canonical state (`docs/backup_restore.md`). Canonical
+runs on the current filesystem, found from manifests rather than copied IDs: Stage 2
+fetch `20260915T133816Z-d7d055d8b7-73b4c983` (metadata; payload reacquired), Stage 4 raw
+`20260915T134433Z-d7d055d8b7-05a81618` (provenance; 19.6 GB payload reacquired), Stage 4
+build `20260915T141929Z-45b6f6e0cc-07aa7070`, Stage 5 benchmarks
+`20260915T143802Z-bb9ba695de-eee71ef4` and `20260915T144551Z-bb9ba695de-4b18d0f3`, and the
+finalized Stage 5 production run `20260915T144926Z-bb9ba695de-9fca4c21`. The canonical
+bundle is tens of MB (MUST 26.7 MB, SHOULD 8.1 MB); model, dataset and MiniLM caches, the
+vLLM image and the raw payloads are pinned and reacquired. Routine protection is one
+MacBook command: `./scripts/preanchor_portable.sh backup <ssh-host> --for-stage 5`; a
+bundle is a verified secondary copy only once that command prints `BACKUP VERIFIED`.
+Continuation on a new filesystem: clone, check out the producing commit, recreate `.env`,
+`bootstrap_remote.sh`, then `./scripts/preanchor_portable.sh restore <host> --for-stage 5`
+from the MacBook and require `RESTORE VERIFIED` with `Ready to continue Stage 5: YES`.

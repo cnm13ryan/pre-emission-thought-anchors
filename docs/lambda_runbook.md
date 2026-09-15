@@ -72,3 +72,18 @@ HF_HUB_CACHE=$PREANCHOR_ROOT/cache/huggingface/datasets-hub \
 
 Stage 5 production now requires `PREANCHOR_HOURLY_RATE` in `.env`, a completed
 benchmark run, and `python -m preanchor.labels.pilot --prepare --benchmark-run-id BENCH`.
+
+## Portable backup (2026-09-15)
+
+Persistent filesystems are region-specific; a new instance may receive an empty
+filesystem with a different UUID. Canonical state is protected by the content-addressed
+portable store (`docs/backup_restore.md`). Routine, from the MacBook:
+`./scripts/preanchor_portable.sh backup <ssh-host> --for-stage <N>` after every canonical
+stage and before any instance termination; it prints `BACKUP VERIFIED` only after the
+MacBook rehashed every object. Restore onto a fresh filesystem with
+`./scripts/preanchor_portable.sh restore <new-host> --for-stage <N>` after
+`bootstrap_remote.sh`; the remote `restore verify` must print `RESTORE VERIFIED`.
+Model, dataset and MiniLM caches, the vLLM image and Stage 2/4 bulk payloads are never
+bundled; their pins are in each bundle manifest. The Stage 0-2 snapshot scripts and
+`pull_artifacts.sh` remain valid for their historical snapshots and can be ingested with
+`preanchor backup import-legacy`.
