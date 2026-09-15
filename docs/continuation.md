@@ -398,6 +398,37 @@ needs a new GPU extraction; the remaining Stage 10 items are CPU-only from store
 The worktree `~/preanchor-stage9` uses its own `.venv` and needs `git submodule update
 --init` (vendor pins) before the suite passes.
 
+## Stage 9 portable backup (2026-09-15, session `20260915T210624Z-backup-95dc0f72`, branch `agent/ops/stage9-backup-20260915-e274f5b6`)
+
+Accepted Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d` (producing commit `67f824a`,
+audit ACCEPT in `docs/stage9_audit.md`; integration commit `63e2e55` is not its producer).
+Pre-backup SHA-256 inventory (44 run files, Stage 8 outputs, Stage 7 index and 40 shards,
+Stage 3/4/7 tables) taken read-only; every hash equals the audit table. Bundle
+`20260915T210935Z-e6b1a272cceea0bc47497ba641344e25ad5a923c9cee9ef82d4b0f8ef2b38a68`
+(`--for-stage 9`, canonical, highest protected stage 9, required stages 3–9, 6,431 entries,
+3.77 GB logical, 6,107 objects all already in the store, 0 new bytes) was prepared under
+`portable-store:writer` held by this session (acquired 21:07:11 UTC, released 21:09:35 UTC,
+receipts under `control/receipts/`), verified locally (0 missing, 0 corrupt), restored into
+the scratch root `/lambda/nfs/preanchor/restore-test-stage9-e274f5b6` (6,431 restored,
+`RESTORE VERIFIED`, scientifically equivalent PASS; "ready to continue Stage 9: NO" only
+because the checkout is `63e2e55`, not `67f824a`). Restored Stage 9/8/7 bytes hash
+identically to the source; Stage 10's `load_stage9_run`, `discover_stage9`, `check_spec` and
+the selected-layer `ActivationLoader` for train/validation/test resolve from the restored
+root without the model. Stage 10 needs the full Stage 7 shards (all 40 units, 3.3 GB): the
+`ActivationLoader` reads every shard for the selected site and lead-one uses the same shards,
+so they are in the bundle (reused Stage 7 objects). Canonical Stage 7–9 bytes are identical
+before and after. **Primary-only until the MacBook pull:**
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-s9-backup \
+PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' \
+./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 9 --no-prepare
+```
+
+(`--no-prepare` pulls `latest` = `e6b1a272…`; without it Lambda prepares an identical bundle
+with a new ID under its own short-lived writer session.) Require `BACKUP VERIFIED` and a
+`pull_verification` receipt for `e6b1a272…`. Stage 10 base: `63e2e55` or a descendant.
+
 ## Stage 9 audit, acceptance, integration and backup (2026-09-15, branch `agent/ops/stage9-audit-20260915-16702032`)
 
 Independent provenance audit of the Stage 9 run (`docs/stage9_audit.md`): **ACCEPT**. The
