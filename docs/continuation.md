@@ -168,3 +168,40 @@ fallback remains primary (Spearman 0.858 < 0.95). Every Stage 5 output produced 
 the fix is marked non-canonical; production generation must restart from a new
 benchmark and a measured projection with `PREANCHOR_HOURLY_RATE` set. PR #1 and PR #2
 are not merged; the repaired code lives on local `codex/mvp` (not pushed).
+
+## Hardware switch: A6000 → H100 (2026-09-15 ~12:55 UTC)
+
+The canonical A6000 Stage 5 production run `20260915T124322Z-d6cd3c11d8-5568422c`
+was stopped cleanly (SIGINT → `StageInterrupted`) at 4/256 units after the user decided to
+move to an H100. Marker: `artifacts/runs/<run_id>/SUPERSEDED_HARDWARE_SWITCH.json`. Its units
+are valid and retained as evidence; nothing was deleted. vLLM was stopped and both tmux
+sessions closed. All A6000 measurements are in `docs/stage5_measurements.md`.
+
+State at hand-off (repo at the commit introducing this entry; PR #1 merged into `main`
+as 6ee01ed):
+
+- Persistent root `/lambda/nfs/preanchor/preanchor` on Lambda filesystem UUID
+  `63166b57-881d-4c14-8d52-3c71802fd86b` (68 GB used: artifacts 20 GB, cache 48 GB,
+  data 2.7 MB). The H100 must be launched in the same region to mount it.
+- Canonical Stage 4: run `20260915T120136Z-b1a2dd9ab0-3b77595c`
+  (`labels.parquet` SHA-256 `2049a33f…163d763`), raw run `20260915T113709Z-734a9a5a41-5c37eb5c`.
+- `.env` is untracked and holds secrets plus `PREANCHOR_HOURLY_RATE`; set the rate to the
+  H100 price on the new instance.
+
+Next actions on the H100 (SPEC §8 admission order, nothing skipped):
+
+```bash
+scripts/bootstrap_remote.sh                       # persistent FS, uv, docker, doctor
+cp <macbook>/.env .                               # then edit PREANCHOR_HOURLY_RATE
+uv run preanchor doctor --config configs/mvp.yaml
+scripts/start_vllm.sh configs/lambda/h100_pcie_80.yaml   # capture startup log
+python -m preanchor.labels.a6000 benchmark --startup <log>   # per concurrency profile
+python -m preanchor.labels.a6000 select --benchmarks <ids> --startup <log>
+python -m preanchor.labels.a6000 execute --run-id <prod> --startup <log>
+python -m preanchor.labels.a6000 finalize --run-id <prod>
+```
+
+The runner is named `a6000` but is hardware-agnostic: it reads the GPU, KV capacity, and
+throughput from the live server and the startup log, and the selection rule, truncation gate
+(5%), and stop rules (10 h / $20) apply unchanged. Use the H100 profile's concurrency values
+as candidate benchmarks; the frozen sampling settings do not change.
