@@ -284,3 +284,38 @@ Stage 3/4 (working tree after `060f6c0`):
   one. Rejected alternative: SPEC §7.5's fixed "at most four in flight on H100", which is
   an execution-only default, not a scientific setting; no sampling, prompt, seed, model,
   dtype or context parameter changed.
+
+## Stage 6 activation-extraction smoke (2026-09-15, branch `codex/stage6`, base `abf7ea5`)
+
+- **fact:** SPEC Stage 6 is the 16-boundary smoke; full extraction is Stage 7 and remains
+  unauthorised. Stage 5 run `20260915T144926Z-bb9ba695de-9fca4c21` is finalised but its
+  secondary backup is unverified (`backup.verified: false`); that gates Stage 7, not Stage 6.
+- **fact (measured, H100 PCIe, disposable probes):** bf16 load 49 s, 28.2 GB VRAM; the
+  longest trace (`3935:incorrect`, 13,087 tokens) replays in 3.0–3.7 s at 30.0 GB peak;
+  repeat replays are bitwise identical; same-shape future-token mutation changes no boundary
+  site; truncated-prefix replay differs for prefixes of 70 and 86 tokens (max abs 4.5 and 2.0
+  at layer 48) and is bitwise identical for the 14 prefixes of 112+ tokens.
+- **choice (user-authorised amendment `docs/amendments/20260915T170000Z.md`, copy under
+  `$PREANCHOR_ROOT/artifacts/amendments/`):** the primary invariance gate is the same-shape
+  future-token mutation at the frozen tolerance; truncated-prefix replay is a recorded
+  diagnostic. No configuration value or hash changed. AGENTS §5.1 still words the gate as
+  prefix-only equality; AGENTS is amended only on explicit instruction, so the wording
+  conflict is recorded here for the user. Rejected alternative: loosening the tolerance.
+- **choice (user decision):** activations are stored for all 6,474 Stage 4 rows; the index
+  carries `eligible`, `eligible_k4`, `exclusion_reason`, `label_source` and the labels hash
+  so the 4,019 eligible rows are a selection, not a re-extraction. SPEC §5's shape
+  `[number_of_sentences, 49, 5120]` permits this; no schema invariant conflicts.
+- **fact (tokenisation):** 2,844 of 6,474 sentences (1,930 eligible) begin after a space
+  whose token spans the space and the first word; per SPEC §3.8 that token is target, so the
+  boundary is the last token of the previous sentence, while the label-generating prefix
+  `full_cot[:char_start]` tokenises to the same prefix plus one `" "` token (2,816 rows;
+  Stage 5 forks 6, 7, 12, 14, 47). Recorded in `docs/alternative_explanations.md`; the
+  frozen boundary definition is unchanged.
+- **choice:** units are one trajectory each, keyed by `ids.cache_key` over the scientific
+  config hash, model and tokenizer revisions, trace hash, token-id hash, boundary-mapping
+  hash, code commit and the Stage 3/4 input hashes; unit contents are deterministic (timings
+  live in attempt records) so a regenerated unit is byte-identical. Shards are named
+  `<problem>_<kind>.safetensors` (the Stage 5 convention) because ids contain a colon.
+  Per-attempt summaries are replaceable current views with immutable attempt copies.
+- **fact:** the worktree's vendor submodules were uninitialised (`provenance()` would fail);
+  `git submodule update --init` restored the pinned commits without changing the lock.
