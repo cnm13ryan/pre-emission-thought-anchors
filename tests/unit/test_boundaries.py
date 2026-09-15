@@ -66,3 +66,24 @@ def test_audit_detects_prefix_token_crossing_boundary():
     bad = [Boundary("t:0", 0, 3, 5, 2, 1, 2, False, 2)]  # token 1 (2,5) ends after char 3
     with pytest.raises(ValueError, match="Prefix token ends after"):
         audit_boundaries([1, 2, 3], [(0, 2), (2, 5), (5, 6)], bad)
+
+
+def test_multibyte_character_tokens_share_a_span():
+    """Regression: 2189:incorrect has byte-level tokens with coinciding offsets."""
+    from transformers import AutoTokenizer
+
+    try:
+        tok = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+                                            revision="1df8507178afcc1bef68cd8c393f61a886323761",
+                                            local_files_only=True)
+    except OSError:
+        pytest.skip("pinned tokenizer not cached")
+    trace = "x = 1\n<think>\nOkay, so 3 \u00f7 2 is 1.5 done. Next."  # " \u00f7" splits into bytes
+    ids, offsets = tokenize_trace(tok, trace)
+    assert any(b > c for (_, b), (c, _) in zip(offsets, offsets[1:], strict=False))
+    rows = [{"sentence_id": "t:0", "sentence_idx": 0, "char_start": trace.index("Okay"),
+             "char_end": trace.index("Next")}, {"sentence_id": "t:1", "sentence_idx": 1,
+             "char_start": trace.index("Next"), "char_end": len(trace)}]
+    table = boundary_table(offsets, rows)
+    audit_boundaries(ids, offsets, table)
+    assert table[1].overlapping_token
