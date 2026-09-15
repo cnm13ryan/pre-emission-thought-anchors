@@ -250,6 +250,11 @@ def run_raw_fetch(directory: Path, repo: Path, config: ExperimentConfig, cache_d
                     done, _ = wait(list(pending), timeout=0.2, return_when=FIRST_COMPLETED)
                     for future in done:
                         path = pending.pop(future)
+                        if future.exception() is not None:
+                            # Stop launching and let in-flight units drain before raising.
+                            stop_event.set()
+                            for other in pending:
+                                other.cancel()
                         row = future.result()  # Propagates worker failures.
                         created += row.pop("created")
                         timings.append({"path": path, "seconds": row.pop("elapsed_seconds")})
@@ -586,10 +591,12 @@ def build_rows(sentences: list[dict], scored: list[dict], labels_config: dict,
     consecutive = int(labels_config.get("convergence_consecutive", 5))
     by_idx = {s["sentence_idx"]: s for s in scored}
     ordered = sorted(sentences, key=lambda r: r["sentence_idx"])
+    # Positions are sentence indices: a fork without samples is never "converged",
+    # so it breaks a consecutive window instead of being dropped from the sequence.
     accuracies = [by_idx[r["sentence_idx"]]["fork_accuracy"] for r in ordered]
-    known = [a for a in accuracies if a is not None]
-    convergence = convergence_idx(known, consecutive) if known else None
-    convergence_k4 = convergence_idx(known, 4) if known else None
+    sequence = [0.5 if a is None else a for a in accuracies]
+    convergence = convergence_idx(sequence, consecutive) if sequence else None
+    convergence_k4 = convergence_idx(sequence, 4) if sequence else None
     final_idx = final_answer_index(ordered) if labels_config.get("exclude_final_answer", True) \
         else None
     rows = []

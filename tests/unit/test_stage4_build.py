@@ -169,3 +169,16 @@ def test_raw_discovery_validation_rejects_gaps_and_foreign_paths():
                                 "forks_per_trajectory": forks}, config)
     with pytest.raises(ValueError, match="Dataset identity"):
         validate_raw_discovery({**good, "revision": "other"}, config)
+
+
+def test_convergence_positions_are_sentence_indices_even_with_an_empty_fork(tmp_path):
+    sentences = [sentence(i, f"S{i}.") for i in range(8)]
+    forks = {i: [sample("1"), sample("1")] for i in range(9)}
+    forks[1] = []  # A fork without samples never counts as converged.
+    forks[0] = [sample("2"), sample("3")]
+    paths = write_forks(tmp_path, forks)
+    scored = score_trajectory(sentences, paths, FakeSimilarity(), LABELS)
+    rows, summary = build_rows(sentences, scored, LABELS, "canonical_fallback")
+    assert summary["convergence_idx"] == 2
+    assert rows[1]["exclusion_reason"] == "missing_adjacent_fork"
+    assert rows[2]["exclusion_reason"] == "convergence"
