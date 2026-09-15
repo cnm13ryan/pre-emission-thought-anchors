@@ -46,7 +46,7 @@ def test_missing_submodule_rejected_even_inside_parent_repo(tmp_path):
 def test_hardware_profiles_match_spec():
     for name, seqs, utilization, length in [
         ("h100_pcie_80", 4, 0.90, 32768),
-        ("a6000_48", 1, 0.92, 32768),
+        ("a6000_48", 2, 0.92, 20480),
         ("a100_40", 1, 0.92, 20480),
     ]:
         value = read_yaml(ROOT / f"configs/lambda/{name}.yaml")

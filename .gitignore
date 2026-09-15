@@ -19,3 +19,6 @@ dist/
 /artifacts/
 /logs/
 /wandb/
+
+# Claude Code review worktrees (tool state, never source)
+.claude/
