@@ -511,3 +511,37 @@ Stage 3/4 (working tree after `060f6c0`):
 - **interpretation:** the pending selection (site 44, C 0.1; Ridge site 28, alpha 1e4) and
   all AUCPR values in `docs/stage8_validation.md` are training-fold diagnostics, not
   evidence about held-out performance.
+
+## Stage 9 implementation and execution (2026-09-15, branch `agent/stage9/validation-freeze-20260915-46c93dfe`)
+
+- **choice:** Stage 9 is its own run whose `input_hashes` name the Stage 8 run and its four
+  selection artifacts, so `check_resume` binds `calibrate`, `freeze-selection` and
+  `evaluate-test` to one code identity (`67f824a`). Rejected: appending to the Stage 8 run
+  (its identity is `0d07354`).
+- **choice (calibrator):** Platt (1999) sigmoid on the selected probe's raw decision score,
+  maximum likelihood against the prior-corrected targets, BFGS, fitted on validation rows
+  only and applied only to the selected binary probe. Rejected: sklearn's private
+  `_SigmoidCalibration` (same estimator, unstable API) and isotonic regression (not the
+  specified method).
+- **choice (freeze hash):** the freeze is the sorted-key JSON of every selection-relevant
+  identity and its SHA-256 is the freeze hash; validation metrics enter only as hashes of
+  the already written files, never as inputs to any choice.
+- **choice (exactly-once):** claim in an immutable manifest revision before reading test,
+  byte-deterministic outputs written with the non-replacing atomic writer, receipt as commit
+  point; a crashed attempt is retried under the same hash and reproduces identical bytes or
+  fails. Rejected: refusing any retry after a crash (would turn an I/O failure into a burned
+  protocol) and a staging-directory rename (not atomic across three files).
+- **choice (bootstrap):** per-trajectory top-10 % statistics are precomputed once and
+  averaged with multiplicity inside each replicate; all models share one problem draw per
+  replicate; seed `derived_seed(seed_root, "bootstrap", split)`.
+- **choice (backup):** the canonical Stage 8 run must fit `n_layers + 1` sites, so the
+  two-site smoke fit on the same inputs stays historical; Stage 9 canonical = the frozen run
+  on the canonical Stage 8 selection, blocker when two are frozen.
+- **fact:** validation: 54 anchors ≥ 20 → calibration fitted (A −0.11335, B 1.88096). Test
+  evaluated once: 25 anchors, primary AUCPR 0.0941 (0.036 … 0.162), gain over the combined
+  observables 0.037 (−0.051 … 0.081), position-only baseline AUCPR 0.139. Residualised
+  control 0.127. No parameter, threshold, layer or calibrator was changed afterwards.
+- **interpretation:** exploratory held-out engineering test on four public problems; the
+  probe exceeds prevalence and the combined observables in point estimate, the paired AUCPR
+  interval against the combined observables includes zero, and a position-only baseline is
+  competitive. No significance claim; Stage 10 controls remain prespecified and unrun.
