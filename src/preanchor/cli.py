@@ -307,7 +307,12 @@ def pilot_labels_command(
     base_only: Annotated[bool, typer.Option()] = False,
     run_id: Annotated[str | None, typer.Option()] = None,
 ) -> None:
-    """Generate resumable Problem 4682 completions; benchmark outputs are isolated."""
+    """Generate resumable Problem 4682 completions; benchmark outputs are isolated.
+
+    Benchmark: ``--benchmark-only N`` measures N completions (resumable with
+    ``--run-id``) and writes a measured resource projection. Production:
+    ``--resume --base-only --run-id ID`` on a run prepared from a benchmark run.
+    """
     if benchmark_only is None and not resume:
         raise typer.BadParameter("production pilot requires --resume after benchmark projection")
     if benchmark_only is None:
@@ -316,105 +321,139 @@ def pilot_labels_command(
         from preanchor.labels.pilot import execute
 
         root = Settings().persistent_root()
-        execute(root, Path(__file__).resolve().parents[2], config,
-                root / "artifacts/runs" / run_id)
+        execute(root, Path(__file__).resolve().parents[2], config, run_path(run_id))
         return
+    result = run_benchmark(config, benchmark_only, run_id=run_id, resume=resume)
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
+def run_benchmark(config: Path, count: int, *, run_id: str | None, resume: bool) -> dict:
+    """Measured benchmark: exact tokenizer parity, digest-checked backend, telemetry."""
+    import resource
     import statistics
+    import subprocess
     import time
 
-    import pyarrow.parquet as pq
-    import yaml
+    from transformers import AutoTokenizer
 
-    from preanchor.io import write_json
+    from preanchor.io import atomic_bytes, json_bytes, write_json
     from preanchor.labels.generate import (
+        ADD_SPECIAL_TOKENS,
         CompletionStore,
-        MiniLMSimilarityScorer,
         VLLMBackend,
-        benchmark,
-        generate_production,
+        benchmark_specs,
         prompt_hash,
-        tokenizer_identity_check,
     )
+    from preanchor.labels.pilot import DIGEST, hourly_rate, inputs, tokenizer_check
+    from preanchor.manifest import check_resume, load_manifest, save_manifest, utc_now
 
+    if resume and not run_id:
+        raise typer.BadParameter("--resume requires --run-id")
     root = Settings().persistent_root()
     persistent_mount(root)
     repo = Path(__file__).resolve().parents[2]
     loaded = load_config(config)
-    trajectory_rows = pq.read_table(root / "data/processed/stage3/trajectories.parquet").to_pylist()
-    trajectory = next((r for r in trajectory_rows if r["trajectory_id"] == "4682:correct"), None)
-    if trajectory is None:
-        raise typer.BadParameter("missing processed 4682:correct trajectory")
-    sentences = pq.read_table(root / "data/processed/stage3/sentences.parquet").to_pylist()
-    trajectory["sentence_boundaries"] = {
-        str(r["sentence_idx"]): int(r["char_start"])
-        for r in sentences if r["trajectory_id"] == "4682:correct"
-    }
-    targets = yaml.safe_load((repo / "configs/pilot_targets_4682.yaml").read_text())["targets"]
+    rate = hourly_rate()
+    trajectory, targets, _references, hashes = inputs(root, repo)
     target_indices = [int(x["sentence_idx"]) for x in targets]
-    run = create_run(root, repo, loaded, ["preanchor pilot-labels --benchmark-only"])
-    stage = run / "stages/stage5"
-    unit_root = stage / ("benchmark_units" if benchmark_only is not None else "units")
-    backend = VLLMBackend(endpoint=loaded.generation.get("endpoint", "http://127.0.0.1:8000"))
-    if benchmark_only is not None:
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            loaded.model.id, revision=loaded.model.revision, trust_remote_code=False)
-        check_prompt = trajectory["prompt"]
-        # vLLM's raw completion endpoint tokenizes the supplied prompt without
-        # injecting BOS/EOS. Validate that exact behavior; never alter prompts
-        # or apply a chat template to hide a mismatch.
-        host_count = len(tokenizer(check_prompt, add_special_tokens=False)["input_ids"])
-        backend_count = backend.tokenize(check_prompt)
-        token_record = tokenizer_identity_check(
-            host_count=host_count, backend_count=backend_count,
-            tokenizer_id=loaded.model.id,
-            tokenizer_revision=loaded.model.tokenizer_revision,
-            prompt_sha256=prompt_hash(check_prompt),
-            special_tokens={"add_special_tokens": False, "chat_template": None})
-        write_json(stage / "tokenizer_validation.json", token_record)
-    started = time.perf_counter()
-    if benchmark_only is not None:
-        rows = benchmark(backend, CompletionStore(unit_root), trajectory, target_indices,
-                         count=benchmark_only, seed_root=loaded.seed_root,
-                         config_hash=loaded.resolved_hash(),
-                         input_hash=trajectory["full_cot_sha256"],
-                         max_tokens=loaded.generation["max_new_tokens"],
-                         temperature=loaded.generation["temperature"],
-                         top_p=loaded.generation["top_p"])
+    if run_id:
+        run = run_path(run_id)
+        manifest = check_resume(run, repo, loaded)
+        if manifest["input_hashes"] != hashes:
+            raise typer.BadParameter("Benchmark run inputs differ from the current inputs")
+        if manifest["stages"].get("stage5", {}).get("namespace") != "benchmark":
+            raise typer.BadParameter("Run is not a benchmark run")
     else:
-        # Similarity is computed from the canonical extracted replacement, not
-        # from any backend convenience field.  Keep MiniLM in this client
-        # process on CPU; vLLM remains the sole GPU resident model.
-        reference_texts = {
-            int(r["sentence_idx"]): r["text"]
-            for r in sentences if r["trajectory_id"] == "4682:correct"
-        }
-        similarity_scorer = MiniLMSimilarityScorer(device="cpu")
-        rows = generate_production(
-            backend, CompletionStore(unit_root), trajectory, targets,
-            seed_root=loaded.seed_root, config_hash=loaded.resolved_hash(),
-            input_hash=trajectory["full_cot_sha256"],
-            samples_per_fork=loaded.generation["samples_per_fork"],
-            max_tokens=loaded.generation["max_new_tokens"],
-            temperature=loaded.generation["temperature"], top_p=loaded.generation["top_p"],
-            similarity_scorer=similarity_scorer, reference_texts=reference_texts)
+        run = create_run(root, repo, loaded, [f"preanchor pilot-labels --benchmark-only {count}"])
+        manifest = load_manifest(run)
+        manifest["input_hashes"] = hashes
+        manifest["identity"]["input_hashes"] = hashes
+        manifest["stages"]["stage5"] = {"state": "benchmark_prepared", "namespace": "benchmark"}
+        save_manifest(run, manifest)
+    stage = run / "stages/stage5"
+    backend = VLLMBackend(endpoint=loaded.generation.get("endpoint", "http://127.0.0.1:8000"),
+                          image_digest=DIGEST)
+    inspection = json.loads(subprocess.check_output(
+        ["sudo", "-n", "docker", "inspect", "preanchor-vllm"], text=True))[0]
+    image = json.loads(subprocess.check_output(
+        ["sudo", "-n", "docker", "image", "inspect", inspection["Image"]], text=True))[0]
+    if not any(d.endswith("@" + DIGEST) for d in image["RepoDigests"]):
+        raise typer.BadParameter("vLLM digest mismatch")
+    if any(p["HostIp"] != "127.0.0.1"
+           for p in inspection["HostConfig"]["PortBindings"]["8000/tcp"]):
+        raise typer.BadParameter("Backend is not localhost only")
+    tokenizer = AutoTokenizer.from_pretrained(
+        loaded.model.id, revision=loaded.model.tokenizer_revision, local_files_only=True)
+    specs = benchmark_specs(trajectory, target_indices, loaded.seed_root,
+                            loaded.resolved_hash(), config_hash_of(hashes), count)
+    expected_tokens, records = {}, []
+    for prompt in sorted({s.prompt for s in specs}, key=prompt_hash):
+        ids = tokenizer(prompt, add_special_tokens=ADD_SPECIAL_TOKENS)["input_ids"]
+        record = tokenizer_check(ids, backend.tokenize_ids(prompt))
+        expected_tokens[prompt_hash(prompt)] = len(ids)
+        records.append({**record, "prompt_sha256": prompt_hash(prompt)})
+    write_json(stage / "tokenizer_validation.json", {
+        "tokenizer_id": loaded.model.id, "tokenizer_revision": loaded.model.tokenizer_revision,
+        "add_special_tokens": ADD_SPECIAL_TOKENS, "chat_template": None,
+        "per_unit_prompt_token_assertion": True, "prompts": records})
+    store = CompletionStore(stage / "benchmark_units")
+    manifest["commands"].append({"command": "pilot-labels --benchmark-only", "count": count,
+                                 "resume": resume})
+    manifest["stages"]["stage5"]["state"] = "benchmark_running"
+    manifest["vllm"] = {"image": loaded.generation["vllm_image"], "digest": DIGEST}
+    save_manifest(run, manifest)
+    peak_vram = 0
+    started = time.perf_counter()
+    rows, created_count = [], 0
+    for spec in specs:
+        row, created = store.run_one(spec, backend, max_tokens=loaded.generation["max_new_tokens"],
+                                     temperature=loaded.generation["temperature"],
+                                     top_p=loaded.generation["top_p"],
+                                     expected_prompt_tokens=expected_tokens[prompt_hash(spec.prompt)])
+        rows.append(row)
+        created_count += int(created)
+        smi = subprocess.check_output(["nvidia-smi", "--query-gpu=memory.used",
+                                       "--format=csv,noheader,nounits"], text=True).strip()
+        peak_vram = max(peak_vram, int(smi.split("\n")[0]))
+        atomic_bytes(stage / "telemetry.json", json_bytes({"updated_at": utc_now(),
+                     "peak_hbm_mib": peak_vram, "completed": len(rows)}), replace=True)
     elapsed = time.perf_counter() - started
     rates = [r["generated_token_count"] / max(float(r.get("runtime_seconds", 0.0)), 1e-9)
              for r in rows]
-    projection = {"schema_version": 1, "status": "benchmark_complete", "run_id": run.name,
-                  "code_config_hash": loaded.resolved_hash(), "model": {
-                      "id": loaded.model.id, "revision": loaded.model.revision,
-                      "dtype": loaded.model.dtype}, "benchmark_completion_count": len(rows),
-                  "elapsed_seconds": elapsed,
+    seconds_per_unit = elapsed / created_count if created_count else None
+    projection = {"schema_version": 2, "status": "benchmark_complete", "run_id": run.name,
+                  "code_commit": manifest["source"]["git_sha"],
+                  "config_hash": loaded.resolved_hash(), "input_hashes": hashes,
+                  "model": {"id": loaded.model.id, "revision": loaded.model.revision,
+                            "dtype": loaded.model.dtype},
+                  "benchmark_completion_count": len(rows), "created_this_session": created_count,
+                  "elapsed_seconds": elapsed, "wall_seconds": elapsed,
+                  "measured_seconds_per_unit": seconds_per_unit,
                   "generated_tokens": sum(r["generated_token_count"] for r in rows),
                   "decode_tokens_per_second": {
                       "median": statistics.median(rates) if rates else 0.0},
-                  "analytical_roofline": {"hbm_tb_per_s": 1.555, "ideal_decode_tokens_per_s": 52.6},
+                  "peak_vram_mib": peak_vram,
+                  "peak_ram_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
+                  "truncations": sum(r["finish_reason"] == "length" for r in rows),
+                  "price_usd_per_hour": rate, "rate_source": "PREANCHOR_HOURLY_RATE",
+                  "projected_base_seconds": seconds_per_unit * 256 if seconds_per_unit else None,
+                  "projected_base_cost_usd": (seconds_per_unit * 256 / 3600 * rate
+                                              if seconds_per_unit else None),
                   "production_started": False}
     write_json(stage / "resource_projection.json", projection)
-    typer.echo(json.dumps({"run_id": run.name, "stage": str(stage), "rows": len(rows),
-                           "elapsed_seconds": elapsed,
-                           "projection": str(stage / "resource_projection.json")}, sort_keys=True))
+    manifest["stages"]["stage5"]["state"] = "benchmark_complete"
+    manifest["output_hashes"]["stage5_benchmark_projection"] = prompt_hash(
+        json.dumps(projection, sort_keys=True))
+    save_manifest(run, manifest)
+    return {"run_id": run.name, "stage": str(stage), "rows": len(rows),
+            "created": created_count, "elapsed_seconds": elapsed,
+            "projection": str(stage / "resource_projection.json")}
+
+
+def config_hash_of(value: dict) -> str:
+    from preanchor.config import config_hash
+
+    return config_hash(value)
 
 
 if __name__ == "__main__":

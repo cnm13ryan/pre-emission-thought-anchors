@@ -9,7 +9,12 @@ import time
 
 import httpx
 
-from preanchor.labels.generate import VLLMBackend, parse_response
+from preanchor.labels.generate import (
+    ADD_SPECIAL_TOKENS,
+    VLLMBackend,
+    check_prompt_tokens,
+    parse_response,
+)
 
 KV_BYTES_PER_TOKEN = 196608
 MAX_CONTEXT = 17417
@@ -73,7 +78,8 @@ def continuous(specs, work, concurrency, *, tick=lambda: None, stopping=lambda: 
 class StreamingVLLMBackend(VLLMBackend):
     """Per-request timings from its own stream, never global counter deltas."""
 
-    def complete(self, prompt, *, seed, max_tokens, temperature, top_p):
+    def complete(self, prompt, *, seed, max_tokens, temperature, top_p,
+                 expected_prompt_tokens=None):
         started = time.perf_counter()
         first = last = None
         pieces, usage, finish, response_id = [], None, None, None
@@ -84,14 +90,17 @@ class StreamingVLLMBackend(VLLMBackend):
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
+            add_special_tokens=ADD_SPECIAL_TOKENS,
             stream=True,
             stream_options={"include_usage": True},
         )
+        # A streaming read timeout bounds the silence between chunks, so a hung
+        # server surfaces as an error instead of an ever-healthy heartbeat.
         with httpx.stream(
             "POST",
             self.endpoint + "/v1/completions",
             json=request,
-            timeout=httpx.Timeout(None, connect=30),
+            timeout=self.timeout(max_tokens),
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():
@@ -125,6 +134,7 @@ class StreamingVLLMBackend(VLLMBackend):
         result = parse_response(
             {"choices": [{"text": "".join(pieces), "finish_reason": finish}], "usage": usage}
         )
+        check_prompt_tokens(result, expected_prompt_tokens)
         elapsed = time.perf_counter() - started
         decode = last - first if first is not None and last is not None else None
         result.update(

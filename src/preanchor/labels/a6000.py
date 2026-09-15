@@ -34,7 +34,15 @@ from preanchor.labels.batching import (
 )
 from preanchor.labels.fresh import answer_category, canonical_kl, legacy_kl
 from preanchor.labels.generate import CompletionStore, MiniLMSimilarityScorer, production_specs
-from preanchor.labels.pilot import DIGEST, FORKS, assert_plan, checkpoint, inputs, support_report
+from preanchor.labels.pilot import (
+    DIGEST,
+    FORKS,
+    assert_plan,
+    checkpoint,
+    hourly_rate,
+    inputs,
+    support_report,
+)
 from preanchor.manifest import (
     check_resume,
     create_run,
@@ -47,7 +55,7 @@ from preanchor.tracking import start_tracking
 
 REPO = Path(__file__).resolve().parents[3]
 CONFIG = REPO / "configs/pilot.yaml"
-RATE = 1.09  # User-supplied planning rate; no billing API credentials available.
+# The planning rate comes from PREANCHOR_HOURLY_RATE (AGENTS §8), never a constant.
 
 
 def gpu():
@@ -348,9 +356,9 @@ def summarize(rows, wall, telemetry, before, after):
             }
             for r in rows
         ],
-        planning_cost_usd=wall / 3600 * RATE,
-        price_usd_per_hour=RATE,
-        rate_source="user planning rate; actual billed rate unavailable",
+        planning_cost_usd=wall / 3600 * hourly_rate(),
+        price_usd_per_hour=hourly_rate(),
+        rate_source="PREANCHOR_HOURLY_RATE user planning rate; billed rate unavailable",
         roofline_tokens_per_second={
             str(b): {str(c): roofline(b, c) for c in (2750, MAX_CONTEXT)} for b in (1, 2, 3)
         },
@@ -361,12 +369,18 @@ def execute(root, run, startup):
     import resource
 
     config = load_config(CONFIG)
+    rate = hourly_rate()
     manifest = check_resume(run, REPO, config)
     specs, _, hashes = plan(root, config)
     if hashes != manifest["input_hashes"]:
         raise ValueError("Input hash mismatch")
     stage = run / "stages/stage5"
     record = read_json(stage / "plan.json")
+    # Host token counts recorded at initialization; every completion must report the same.
+    expected_tokens = {int(t["fork_idx"]): int(t["count"])
+                       for t in read_json(stage / "tokenizer_validation.json")}
+    if set(expected_tokens) != set(FORKS):
+        raise ValueError("Tokenizer validation does not cover every fork")
     benchmark = record["namespace"] == "benchmark"
     if benchmark:
         specs = [s for s in specs if s.sample_idx == 0]
@@ -399,7 +413,9 @@ def execute(root, run, startup):
                 except (ValueError, OSError, KeyError, TypeError):
                     pending.append(spec)
                     continue
-                row, _ = store.raw_one(spec, backend, max_tokens=16384, temperature=0.6, top_p=0.95)
+                row, _ = store.raw_one(spec, backend, max_tokens=16384, temperature=0.6,
+                                       top_p=0.95,
+                                       expected_prompt_tokens=expected_tokens[spec.fork_idx])
                 rows.append(row)
                 continue
         pending.append(spec)
@@ -447,7 +463,8 @@ def execute(root, run, startup):
 
                 def work(spec):
                     return store.raw_one(
-                        spec, backend, max_tokens=16384, temperature=0.6, top_p=0.95
+                        spec, backend, max_tokens=16384, temperature=0.6, top_p=0.95,
+                        expected_prompt_tokens=expected_tokens[spec.fork_idx],
                     )
 
                 tick()
@@ -475,7 +492,7 @@ def execute(root, run, startup):
                         / rate
                         if rate
                         else None,
-                        session_cost_usd=elapsed / 3600 * RATE,
+                        session_cost_usd=elapsed / 3600 * rate,
                         truncations=sum(r["finish_reason"] == "length" for r in rows),
                     )
                     atomic_bytes(stage / "progress.json", json_bytes(progress), replace=True)
@@ -611,8 +628,8 @@ def select(root, benchmark_ids, startup):
         projected_generated_tokens=total_tokens,
         projected_seconds=seconds,
         projected_gpu_hours=seconds / 3600,
-        projected_cost_usd=seconds / 3600 * RATE,
-        price_usd_per_hour=RATE,
+        projected_cost_usd=seconds / 3600 * hourly_rate(),
+        price_usd_per_hour=hourly_rate(),
         rate_source=summary["rate_source"],
         measured_seconds_per_unit=summary["wall_seconds"] / 8,
         peak_vram_mib=summary["peak_hbm_mib"],

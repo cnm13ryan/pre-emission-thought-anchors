@@ -100,10 +100,17 @@ def test_equal_token_counts_do_not_hide_different_ids():
 
 def test_budget_guard_after_32_and_truncation_guard():
     row = {"finish_reason": "stop", "runtime_seconds": 150}
-    assert guard_reason([row] * 31) is None
-    assert guard_reason([row] * 32) == "BASE_PROJECTION_EXCEEDS_AUTHORIZATION"
-    assert guard_reason([{**row, "runtime_seconds": 110}] * 32) is None
-    assert guard_reason([{**row, "finish_reason": "length"}]) is not None
+    # Wall-clock projection only once 32 units completed in this session.
+    assert guard_reason([row] * 31, session_seconds=31 * 150, session_completed=31,
+                        rate=1.99) is None
+    assert guard_reason([row] * 32, session_seconds=32 * 150, session_completed=32,
+                        rate=1.99) == "BASE_PROJECTION_EXCEEDS_AUTHORIZATION"
+    assert guard_reason([row] * 32, session_seconds=32 * 110, session_completed=32,
+                        rate=1.99) is None
+    # Truncation is judged on a minimum sample, never on a single early row.
+    assert guard_reason([{**row, "finish_reason": "length"}], rate=1.99) is None
+    assert guard_reason([{**row, "finish_reason": "length"}] * 20,
+                        rate=1.99) == "LENGTH_TRUNCATION_ABOVE_5_PERCENT"
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), True])

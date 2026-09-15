@@ -21,6 +21,26 @@ from preanchor.labels.importance import normalize_answer
 
 MODEL_ID = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 MODEL_REVISION = "1df8507178afcc1bef68cd8c393f61a886323761"
+# Stored Thought Anchors prompts already carry every token the trace had; the server
+# must never prepend BOS/EOS. Sent explicitly on every request, never left to defaults.
+ADD_SPECIAL_TOKENS = False
+
+
+def request_timeout(max_tokens: int, *, floor_tokens_per_second: float = 4.0,
+                    minimum_seconds: float = 600.0) -> float:
+    """Read timeout that only a hung request can exceed at a pessimistic decode rate."""
+    if max_tokens < 1 or floor_tokens_per_second <= 0:
+        raise ValueError("max_tokens and the floor rate must be positive")
+    return max(minimum_seconds, max_tokens / floor_tokens_per_second)
+
+
+def check_prompt_tokens(result: dict[str, Any], expected: int | None) -> None:
+    """Fail closed when the server's prompt token count differs from the host count."""
+    if expected is None:
+        return
+    actual = result.get("prompt_token_count")
+    if actual != expected:
+        raise ValueError(f"Backend prompt token count {actual} != host count {expected}")
 
 
 @dataclass(frozen=True)
@@ -142,7 +162,8 @@ class Backend(Protocol):
     image_digest: str | None
 
     def complete(self, prompt: str, *, seed: int, max_tokens: int,
-                temperature: float, top_p: float) -> dict[str, Any]: ...
+                temperature: float, top_p: float,
+                expected_prompt_tokens: int | None = None) -> dict[str, Any]: ...
 
 
 class SimilarityScorer(Protocol):
@@ -173,19 +194,32 @@ class VLLMBackend:
     name = "vllm-openai"
 
     def __init__(self, endpoint: str = "http://127.0.0.1:8000", model: str = MODEL_ID,
-                 image_digest: str | None = None):
+                 image_digest: str | None = None, read_timeout_seconds: float | None = None):
         self.endpoint, self.model, self.image_digest = endpoint.rstrip("/"), model, image_digest
+        self.read_timeout_seconds = read_timeout_seconds
+
+    def timeout(self, max_tokens: int) -> httpx.Timeout:
+        read = self.read_timeout_seconds or request_timeout(max_tokens)
+        return httpx.Timeout(connect=30, read=read, write=30, pool=30)
+
+    def request(self, prompt: str, *, seed: int, max_tokens: int, temperature: float,
+                top_p: float) -> dict[str, Any]:
+        return {"model": self.model, "prompt": prompt, "max_tokens": max_tokens,
+                "temperature": temperature, "top_p": top_p, "seed": seed,
+                "add_special_tokens": ADD_SPECIAL_TOKENS}
 
     def complete(self, prompt: str, *, seed: int, max_tokens: int,
-                 temperature: float, top_p: float) -> dict[str, Any]:
+                 temperature: float, top_p: float,
+                 expected_prompt_tokens: int | None = None) -> dict[str, Any]:
         before = self.metrics()
         started = time.perf_counter()
-        response = httpx.post(f"{self.endpoint}/v1/completions", json={
-            "model": self.model, "prompt": prompt, "max_tokens": max_tokens,
-            "temperature": temperature, "top_p": top_p, "seed": seed,
-        }, timeout=None)
+        response = httpx.post(f"{self.endpoint}/v1/completions",
+                              json=self.request(prompt, seed=seed, max_tokens=max_tokens,
+                                                temperature=temperature, top_p=top_p),
+                              timeout=self.timeout(max_tokens))
         response.raise_for_status()
         result = parse_response(response.json())
+        check_prompt_tokens(result, expected_prompt_tokens)
         result["runtime_seconds"] = time.perf_counter() - started
         result["backend"] = self.name
         result["image_digest"] = self.image_digest
@@ -217,7 +251,7 @@ class VLLMBackend:
 
     def tokenize_ids(self, prompt: str) -> list[int]:
         response = httpx.post(f"{self.endpoint}/tokenize", json={
-            "model": self.model, "prompt": prompt,
+            "model": self.model, "prompt": prompt, "add_special_tokens": ADD_SPECIAL_TOKENS,
         }, timeout=30)
         response.raise_for_status()
         payload = response.json()
@@ -236,13 +270,16 @@ class FakeBackend:
         self.calls = 0
 
     def complete(self, prompt: str, *, seed: int, max_tokens: int,
-                 temperature: float, top_p: float) -> dict[str, Any]:
+                 temperature: float, top_p: float,
+                 expected_prompt_tokens: int | None = None) -> dict[str, Any]:
         value = self.outputs[self.calls % len(self.outputs)]
         self.calls += 1
-        return {"raw_answer": value, "normalized_answer": normalize_response(value),
-                "finish_reason": "stop", "generated_token_count": 1,
-                "prompt_token_count": len(prompt.split()), "runtime_seconds": 0.0,
-                "backend": self.name, "image_digest": self.image_digest}
+        result = {"raw_answer": value, "normalized_answer": normalize_response(value),
+                  "finish_reason": "stop", "generated_token_count": 1,
+                  "prompt_token_count": len(prompt.split()), "runtime_seconds": 0.0,
+                  "backend": self.name, "image_digest": self.image_digest}
+        check_prompt_tokens(result, expected_prompt_tokens)
+        return result
 
 
 def tokenizer_identity_check(*, host_count: int, backend_count: int,
@@ -333,14 +370,16 @@ class CompletionStore:
         self.raw_units = UnitStore(root.parent / (root.name + "_raw"))
 
     def raw_one(self, spec: CompletionSpec, backend: Backend, *, max_tokens: int,
-                temperature: float, top_p: float) -> tuple[dict, bool]:
+                temperature: float, top_p: float,
+                expected_prompt_tokens: int | None = None) -> tuple[dict, bool]:
         """Durable generation without loading or sharing a similarity model."""
         request = {"rollout_id": spec.rollout_id, "seed": spec.seed,
                    "prompt_sha256": prompt_hash(spec.prompt), "max_tokens": max_tokens,
                    "temperature": temperature, "top_p": top_p}
         def writer(directory):
             result = backend.complete(spec.prompt, seed=spec.seed, max_tokens=max_tokens,
-                                      temperature=temperature, top_p=top_p)
+                                      temperature=temperature, top_p=top_p,
+                                      expected_prompt_tokens=expected_prompt_tokens)
             write_json(directory / "response.json", result)
             write_json(directory / "request.json", request)
         directory, created = self.raw_units.produce(spec.rollout_id, writer)
@@ -353,12 +392,14 @@ class CompletionStore:
     def run_one(self, spec: CompletionSpec, backend: Backend, *, max_tokens: int,
                 temperature: float, top_p: float,
                 similarity_scorer: SimilarityScorer | None = None,
-                reference_texts: dict[int, str] | None = None) -> tuple[dict, bool]:
+                reference_texts: dict[int, str] | None = None,
+                expected_prompt_tokens: int | None = None) -> tuple[dict, bool]:
         key = spec.rollout_id
         def writer(directory: Path) -> None:
             def raw_writer(raw_directory: Path) -> None:
                 result = backend.complete(spec.prompt, seed=spec.seed, max_tokens=max_tokens,
-                                          temperature=temperature, top_p=top_p)
+                                          temperature=temperature, top_p=top_p,
+                                          expected_prompt_tokens=expected_prompt_tokens)
                 write_json(raw_directory / "response.json", result)
             raw_directory, _ = self.raw_units.produce(key, raw_writer)
             result = read_json(raw_directory / "response.json")
