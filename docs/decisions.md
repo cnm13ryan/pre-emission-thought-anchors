@@ -307,3 +307,15 @@ Stage 3/4 (working tree after `060f6c0`):
   record `local_path` as run-relative, so no physical location participates in
   scientific identity. Rejected alternative: silently migrating the current canonical
   tables, which would invalidate the finalized production run.
+- **fact (portable backup, 2026-09-15):** first independently verified portable canonical
+  MacBook secondary copy of the finalized H100 Stage 5 lineage (production run
+  `20260915T144926Z-bb9ba695de-9fca4c21`): bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2`, kind `canonical`, highest protected stage 5, 4,282 unique
+  objects, 33,704,252 bytes rehashed on the MacBook, 0 missing, 0 corrupt, outcome
+  `secondary_copy_verified`, receipt `receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` under `~/preanchor-backups/portable/` and
+  copied back to `artifacts/portable/receipts/`. This validates the content-addressed
+  incremental design end-to-end against the real finalized state. A bundle prepared on
+  Lambda/NFS (`prepare` receipt, `secondary_verified: false`) and an independently
+  verified secondary copy (`pull_verification` receipt) are distinct states; only the
+  latter satisfies the backup gate. The MacBook path and filesystem identity are
+  provenance only and never enter scientific identity. Rejected alternative: treating
+  the NFS bundle or the run manifest's `backup` field as verification.

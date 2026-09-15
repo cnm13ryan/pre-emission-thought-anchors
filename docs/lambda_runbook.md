@@ -34,8 +34,9 @@ Stage 1 provides `preanchor init-run`, `io-smoke --resume`, and `status`. The de
 After it passes and the source is committed, prepare its immutable MacBook pull snapshot
 with `.venv/bin/python scripts/prepare_stage1_backup.py RUN_ID`. Run the snapshot's
 `pull_artifacts.sh` on the MacBook exactly as for Stage 0; return the emitted receipt.
-This is a stage-specific backup implementation. Later dataset/model stages have not
-been admitted or implemented, and termination markers remain prohibited.
+This is a stage-specific backup implementation, retained for Stage 0-2 history; routine
+stage-close backups now use the portable workflow in `docs/backup_restore.md`.
+Termination markers remain prohibited.
 
 Stage 2 now provides pinned `fetch --discover`, `fetch [--resume --run-id ID]`,
 `fetch --smoke`, and `validate-download --run-id ID`. Explicit run IDs prevent ambiguous
@@ -43,7 +44,7 @@ resume. Code/config/input identities must match; completed historical runs are n
 resumable under a new commit. The stage backup helper is
 `scripts/prepare_stage2_backup.py FULL_RUN_ID SMOKE_RUN_ID`; it retains both runs and
 minimal inspection evidence, excluding HF caches. See `docs/stage2_validation.md` for
-current identifiers. Await the MacBook verification receipt before Stage 3.
+current identifiers (historical; superseded by the portable workflow below).
 
 ## A6000 session (2026-09-15)
 
@@ -87,3 +88,8 @@ Model, dataset and MiniLM caches, the vLLM image and Stage 2/4 bulk payloads are
 bundled; their pins are in each bundle manifest. The Stage 0-2 snapshot scripts and
 `pull_artifacts.sh` remain valid for their historical snapshots and can be ingested with
 `preanchor backup import-legacy`.
+Non-interactive SSH may not find `uv` in `~/.local/bin`; pass
+`PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor'`. Future region
+migrations restore from the MacBook copy; they never depend on mounting the old
+filesystem. Current state: the finalized H100 Stage 5 lineage is verified on the MacBook
+(bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2`, see `docs/continuation.md`).

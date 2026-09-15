@@ -13,6 +13,21 @@ filesystem might be lost):
 ./scripts/preanchor_portable.sh verify                                # rehash the local copy
 ```
 
+Verified real-world run (2026-09-15, first canonical secondary copy of the finalized H100
+Stage 5 state; SSH alias `preanchor-h100` in `~/.ssh/config` on the MacBook):
+
+```bash
+PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' \
+./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 5
+```
+
+`PREANCHOR_REMOTE_CMD` is needed when non-interactive SSH cannot resolve `uv`: the
+remote command runs in a non-login shell whose `PATH` lacks `~/.local/bin`, where the
+bootstrap installs `uv`. Result: bundle
+`20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2`, 4,282 objects / 33,704,252 bytes rehashed on the MacBook, 0 missing, 0 corrupt,
+receipt `~/preanchor-backups/portable/receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` (copied back to
+`artifacts/portable/receipts/` on Lambda), final line `BACKUP VERIFIED`.
+
 Before terminating a Lambda instance whose persistent filesystem you may never mount
 again: run the `backup` command above and require the literal line `BACKUP VERIFIED` and a
 `pull_verification` receipt under `~/preanchor-backups/portable/receipts/`. Nothing else
