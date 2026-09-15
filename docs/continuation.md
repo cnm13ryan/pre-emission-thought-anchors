@@ -271,3 +271,14 @@ for this lineage. The backup prerequisite for proceeding beyond the protected St
 state is satisfied; Stage 6 remains unauthorized until its own gates pass. Physical
 location (`8dd29228-…` virtiofs, host, MacBook path) is provenance only and is not part
 of the scientific identity of the run.
+
+## Stage 6 operational closure (2026-09-15)
+
+Stage 6 is finalized and its evidence is in the portable store as bundle
+`20260915T180804Z-f4cd4b0b8f03569ba33b87502010f3d015214a3157469b56d947faf1d73e6d7d`
+(canonical, protected through Stage 6, restore-verified into a scratch root; see
+`docs/stage6_validation.md`). MacBook secondary verification is pending; until its
+`pull_verification` receipt exists, no Stage 6 secondary copy is verified. Stage 7 is not
+started and needs explicit authorisation plus a projection regenerated at its launch commit.
+Branch `codex/stage6` (contains `codex/mvp`); the MacBook wrapper must point
+`PREANCHOR_REMOTE_REPO` at a checkout containing `128e1d3`.

@@ -28,6 +28,26 @@ bootstrap installs `uv`. Result: bundle
 receipt `~/preanchor-backups/portable/receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` (copied back to
 `artifacts/portable/receipts/` on Lambda), final line `BACKUP VERIFIED`.
 
+Stage 6 (2026-09-15): bundle
+`20260915T180804Z-f4cd4b0b8f03569ba33b87502010f3d015214a3157469b56d947faf1d73e6d7d` was
+prepared on Lambda (152 new objects, 216 MB beyond the Stage 5 store) and restore-verified
+into a scratch root. The Stage 5 secondary copy above stays as it is. The MacBook pull for
+Stage 6 must run against a checkout that contains Stage 6 backup support (`128e1d3` or a
+descendant); `~/preanchor-repo` is still on `codex/mvp`, so pass `PREANCHOR_REMOTE_REPO`:
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage6 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 6 --no-prepare
+```
+
+`--no-prepare` pulls the already prepared and restore-verified bundle (`latest`); without
+it Lambda prepares a fresh bundle with identical content and a new ID first. Either way
+the Stage 6 secondary copy is verified only when the command ends with `BACKUP VERIFIED`
+and a `pull_verification` receipt exists. What a `--for-stage 6` bundle adds: every
+complete Stage 6 run matching the current Stage 3/4 tables (activation shards and unit
+records, `activations/index.parquet`, the Stage 6 summary, invariance report, resource
+projection, boundary audit and logit features, run manifests and configs); Stages 3–5 are
+required dependencies of the bundle.
+
 Before terminating a Lambda instance whose persistent filesystem you may never mount
 again: run the `backup` command above and require the literal line `BACKUP VERIFIED` and a
 `pull_verification` receipt under `~/preanchor-backups/portable/receipts/`. Nothing else

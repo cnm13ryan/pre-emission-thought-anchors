@@ -1,5 +1,11 @@
 # Stage 6 validation — activation-extraction smoke (2026-09-15, H100 PCIe)
 
+**Status: Stage 6 is finalized.** Stage 7 has not started. The frozen pre-emission boundary
+(`target_token_start − 1`, overlapping token belongs to the target) is unchanged; under
+amendment `docs/amendments/20260915T170000Z.md` the same-shape future-token mutation is
+the admission gate and truncated-prefix differences are diagnostic evidence only.
+Operational closure (portable backup, scratch restore) is in the last section.
+
 Branch `codex/stage6` from `abf7ea5`; implementation commits `4e00554` (extraction),
 `434340c` (amendment and records), `f9dd294` (offset fix), `1907c1c` (heartbeat during
 diagnostics). Persistent root `/lambda/nfs/preanchor/preanchor`; every run below is under
@@ -79,5 +85,40 @@ and adds a 100 MB/s write allowance); the smoke run's projection from its cold f
 |---|---|
 | Measured fit on this GPU (SPEC §7.1, AGENTS §8) | PASS |
 | Resource projection newer than the current commit | must be regenerated at the Stage 7 commit (the envelope projection is from `f9dd294`; `1907c1c` changed only heartbeat pulses) |
-| Stage 5 secondary backup verified | BLOCKED (`backup.verified: false`; MacBook receipt pending) |
-| Explicit user authorisation of Stage 7 | BLOCKED |
+| Stage 5 secondary backup verified | PASS (portable bundle `20260915T163333Z-d565605b…`, MacBook receipt `20260915T163431Z-pull_verification-d565605b9518-62c783c6.json`, `secondary_copy_verified`) |
+| Explicit user authorisation of Stage 7 | BLOCKED until given |
+
+## Operational closure (2026-09-15, commit `128e1d3`)
+
+Canonical Stage 6 state for the portable backup (`preanchor backup plan --for-stage 6`,
+classification in `src/preanchor/backup/classify.py::discover_stage6`): every run whose
+manifest has `stages.stage6.state == complete` and whose `input_hashes` are the current
+Stage 3/4 tables. That is the four runs above (`…7a4c0acd`, `…1dfccd21`, `…c8fcfdfe`,
+`…36843658`; 6 activation units, 469 rows). `MUST_BACK_UP` (exact bytes, required):
+activation shards and their unit records, `activations/index.parquet` with schema and
+checksum sidecars, `stages/stage6/{summary,invariance_report,resource_projection,
+boundary_audit}.json`, `logit_features.parquet`, attempt records, run manifests and their
+revision chain, `resolved_config.yaml`, `git.patch`. `SHOULD_BACK_UP`: heartbeat,
+failure records, logs, environment snapshots. Historical evidence, not bundled: the failed
+first drill `20260915T164439Z-29d5f2acb0-586ddfe5` (state `failed`) and unit quarantine
+directories. Excluded: caches, `.venv`, `.env`, the portable store itself; model weights and
+upstream payloads are reacquired by pin. A Stage 6 bundle carries Stages 3–5 as required
+dependencies (`STAGE_DEPENDENCIES[6] = (3, 4, 5)`), so it is a superset of the verified
+Stage 5 bundle.
+
+Real round trip on this host (bundle
+`20260915T180804Z-f4cd4b0b8f03569ba33b87502010f3d015214a3157469b56d947faf1d73e6d7d`,
+kind canonical, highest protected stage 6, producer `128e1d3`, clean): 4,645 entries,
+277,768,865 logical bytes, 4,434 unique objects of which 4,282 were already in the Stage 5
+store and 152 are new (216,317,090 incremental bytes); `backup verify` rehashed all 4,434
+objects with 0 missing and 0 corrupt; `restore apply` into the empty local-disk root
+`/home/ubuntu/preanchor-scratch-restore-stage6` installed 4,645 files; `restore verify
+--for-stage 6` passed every check (`RESTORE VERIFIED`, receipt
+`20260915T18…-restore_verification-f4cd4b0b8f03-….json`, 2,770 required objects,
+268,375,162 bytes), including `validate-activations` on each restored run, input-identity
+against the restored Stage 3/4 tables and the primary invariance gate; an independent
+SHA-256 comparison of 196 identity-bearing files found no mismatch. The scratch root is
+retained pending the user's approval to delete it.
+
+State: **Stage 6 portable bundle prepared and restore-verified; MacBook secondary
+verification pending.** The MacBook command is in `docs/backup_restore.md`.
