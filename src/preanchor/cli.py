@@ -654,6 +654,103 @@ def validate_probes_command(
         "max_ap_recompute_diff", "selected")}), sort_keys=True))
 
 
+@app.command("calibrate")
+def calibrate_command(
+    probe_run_id: Annotated[str, typer.Option(
+        help="Finalized Stage 8 run (fit, select and validate-probes complete).")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """SPEC Stage 9 step 1-3: create the Stage 9 run, score the validation partition with
+    the Stage 8 selection, fit (or explicitly skip) the validation-only Platt calibrator and
+    write the validation diagnostics. Never reads a test row. CPU only."""
+    from preanchor.probes.stage9 import calibrate, prepare_run
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    run = prepare_run(root, repo, loaded, run_path(probe_run_id))
+    result = calibrate(run, repo, loaded)
+    cal, part = result["calibrator"], result["metrics"]["partition"]
+    typer.echo(json.dumps(redact({
+        "run_id": run.name, "n_rows": part["n_rows"], "n_positive": part["n_positive"],
+        "calibration_fitted": cal["fitted"], "skip_reason": cal["skip_reason"],
+        "primary_validation_average_precision": result["metrics"]["primary"]["value"],
+        "predictions_sha256": result["predictions_sha256"],
+        "metrics_sha256": result["metrics_sha256"]}), sort_keys=True))
+
+
+@app.command("freeze-selection")
+def freeze_selection_command(
+    run_id: Annotated[str, typer.Option(help="Stage 9 run with a complete calibration.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """SPEC Stage 9 step 4-5: write metrics/analysis_registry.json and the immutable
+    frozen_selection.json; prints the exact SHA-256 that evaluate-test requires."""
+    from preanchor.probes.stage9 import freeze
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    result = freeze(run_path(run_id), repo, loaded)
+    typer.echo(json.dumps(redact({
+        "run_id": run_id, "freeze_sha256": result["freeze_sha256"],
+        "analysis_registry_sha256": result["analysis_registry_sha256"],
+        "binary": result["frozen"]["binary"], "continuous": result["frozen"]["continuous"],
+        "anchor_threshold": result["frozen"]["anchor_threshold"],
+        "calibration_fitted": result["frozen"]["calibration"]["fitted"]}), sort_keys=True))
+
+
+@app.command("evaluate-test")
+def evaluate_test_command(
+    run_id: Annotated[str, typer.Option(help="Frozen Stage 9 run.")],
+    confirm_frozen: Annotated[str, typer.Option(
+        help="Exact SHA-256 of frozen_selection.json; anything else fails closed.")],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """SPEC Stage 9 step 6: the single held-out test evaluation. Refuses to run before the
+    freeze, with a wrong hash, after any post-freeze change, or a second time."""
+    from preanchor.probes.stage9 import TestLockError, evaluate_test
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    try:
+        result = evaluate_test(run_path(run_id), repo, loaded, confirm_frozen)
+    except TestLockError as exc:
+        typer.echo(json.dumps({"ok": False, "refused": str(exc)}))
+        raise typer.Exit(2) from None
+    metrics, receipt = result["metrics"], result["receipt"]
+    typer.echo(json.dumps(redact({
+        "run_id": run_id, "freeze_sha256": receipt["freeze_sha256"],
+        "n_rows": receipt["n_rows"], "n_positive": receipt["n_positive"],
+        "n_problems": receipt["n_problems"], "attempts": len(receipt["attempts"]),
+        "primary_test_average_precision": metrics["primary"]["value"],
+        "predictions_sha256": receipt["predictions_sha256"],
+        "metrics_sha256": receipt["metrics_sha256"]}), sort_keys=True))
+
+
+@app.command("validate-evaluation")
+def validate_evaluation_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+) -> None:
+    """Re-check a Stage 9 run read-only: freeze integrity against every current artifact,
+    validation/test split membership, exactly-once test receipt, bootstrap specification."""
+    from preanchor.probes.stage9 import validate_stage9
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    report = validate_stage9(run_path(run_id), repo, loaded)
+    typer.echo(json.dumps(redact(report), sort_keys=True))
+    if not report["ok"]:
+        raise typer.Exit(1)
+
+
 @app.command("validate-activations")
 def validate_activations_command(
     run_id: Annotated[str, typer.Option()],
