@@ -9,6 +9,12 @@ tree** (`dirty_diff_hash` is the empty-diff hash `8794212a…`). Persistent root
 `artifacts/runs/`. Stage 3–6 canonical artifacts were read only. Cost figures use
 `PREANCHOR_HOURLY_RATE=2.49`. Stage 8 was not started.
 
+**Status: Stage 7 is finalized and operationally closed** (portable bundle prepared and
+restore-verified into an empty scratch root, last section). Final commits: launch `3c2d4ec`,
+merge of the Stage 6 closure `480031e`, Stage 7 backup support `56aea1b`, and the
+documentation commit that carries this record. **Stage 8 has not been started.** Stage 7
+portable bundle prepared and restore-verified; MacBook secondary verification pending.
+
 Inputs (identical in every run, equal to the Stage 6 records): `stage3/trajectories.parquet`
 `4fd5fbee…39913d`, `stage3/sentences.parquet` `83cf8c20…143cf8`, `stage4/labels.parquet`
 `fab9886e…a61b31`; model and tokenizer revision `1df8507178afcc1bef68cd8c393f61a886323761`;
@@ -134,3 +140,68 @@ diagnostic changing).
   suite passed twice afterwards.
 - `ruff check .` reports pre-existing violations in `src/preanchor/labels/convergence.py`,
   `src/preanchor/labels/threshold.py` and `scripts/archive/`.
+
+## Operational closure (2026-09-15, commit `56aea1b`)
+
+Canonical Stage 7 state for the portable backup (`preanchor backup plan --for-stage 7`,
+`src/preanchor/backup/classify.py::discover_stage7`): the single complete Stage 7 run whose
+`build-dataset` published the current `data/processed/stage7/features.parquet` on the
+current Stage 3/4 tables, i.e. `20260915T182306Z-3ab408d80a-7452f1c2`. `MUST_BACK_UP`
+(exact bytes, required): its 40 activation units (shards, `shard_meta.json`, `SUCCESS.json`),
+`activations/index.parquet` with schema and checksum sidecars, `stages/stage7/{summary,
+resource_projection}.json` and attempt records, `features/{features.parquet, feature_audit.json,
+feature_validation.json}` with sidecars and attempts, run manifests and their revision
+chain, `resolved_config.yaml`, `git.patch`; and the published
+`data/processed/stage7/{features.parquet, features.parquet.schema.json, feature_audit.json}`
+with `.sha256` sidecars. `SHOULD_BACK_UP`: heartbeat, logs, environment, W&B offline files.
+Historical, not bundled: `data/processed/stage7/superseded/` (the relocated smoke
+publication), the failed first Stage 6 drill, and unit quarantine directories (none exist).
+Excluded or reacquired by pin: caches, `.venv`, `.env`, the portable store itself, model
+weights, upstream payloads, the vLLM image. `STAGE_DEPENDENCIES[7] = (3, 4, 5, 6)`: a Stage 7
+bundle carries Stages 3–6 as required dependencies (Stage 6 being the measured-fit and
+launch-projection admission evidence; the six complete Stage 6 runs on the current tables,
+including the two Stage 7 smoke sessions, are bundled).
+
+Real round trip on this host, twice. First, bundle
+`20260915T185656Z-038fb6cf54257973d96674d0a46a15977e095d4ffcafa104efe220419a6b98e0`
+(producer `480031e` dirty, before the backup-support commit): 5,093 entries,
+3,612,780,272 logical bytes, 4,791 unique objects of which 4,434 were already in the store
+and **357 new (3,118,456,529 incremental bytes)**; `backup verify` rehashed all 4,791
+objects (3,368,477,871 B, 0 missing, 0 corrupt); `restore apply` into the empty local-disk
+root `/home/ubuntu/preanchor-scratch-restore-stage7` installed 5,093 files;
+`restore verify --for-stage 7` passed 140 checks (`RESTORE VERIFIED`). That verification
+exposed that the Stage 7 verifier re-ran `validate-features` with its record writer on,
+which rewrote the restored `feature_validation.json` (one file differing from the bundle);
+fixed in `56aea1b` (`validate_features(write_record=False)` in the verifier, with a
+read-only assertion in the test). Second, the final bundle
+**`20260915T191239Z-161f21fc4351fa8a064ee7a79d0750fa511b5d6afd71543930c5247ee8acc0e5`**
+(kind canonical, highest protected stage 7, producer `56aea1b` clean, scientific identity
+hash `acf1f3a2…`): identical content, 5,093 entries, 3,612,780,272 logical bytes
+(MUST 3,441 files / 3,603,989,027 B; SHOULD 1,652 files / 8,791,245 B), 4,791 unique
+objects, **0 new objects, 0 incremental bytes** over the first bundle; `backup verify` 4,791
+objects, 3,368,477,871 B rehashed, 0 missing, 0 corrupt; `restore apply` into the empty
+local-disk root `/home/ubuntu/preanchor-scratch-restore-stage7-b` installed 5,093 files
+(3,612,780,272 B, receipt `20260915T191438Z-restore-161f21fc4351-99076ee9.json`);
+`restore verify --for-stage 7` passed 140 checks and 0 failed (`RESTORE VERIFIED`, receipt
+`20260915T191509Z-restore_verification-161f21fc4351-2a895c8f.json`), including
+`validate-activations` and a read-only `validate-features` on the restored run, index/shard/
+feature hashes, feature columns and head weights against the bundle identity, the frozen
+extraction settings, the published-copy identity, and every Stage 3–6 check of the earlier
+bundles. An independent SHA-256 comparison of 289 identity-bearing files (3,320,838,172 B:
+the run's activations, features, Stage 7 records, manifest, config and patch, the published
+Stage 7 table and the Stage 3/4 tables) between the canonical root and the scratch root
+found no mismatch. `Ready to continue Stage 7: NO` is the expected informational result
+because the verifying checkout (`56aea1b`) is not the producing commit (`3c2d4ec`).
+Both scratch roots are retained pending the user's approval to delete them.
+
+State: **Stage 7 portable bundle prepared and restore-verified; MacBook secondary
+verification pending.** A Lambda-side bundle is primary-only. The MacBook command (from the
+MacBook, against the `codex/stage7` checkout that contains `56aea1b`):
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage7 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 7 --no-prepare
+```
+
+`--no-prepare` pulls `latest`, which is the final bundle above; the secondary copy is
+verified only when the command ends with `BACKUP VERIFIED` and a `pull_verification`
+receipt exists under `~/preanchor-backups/portable/receipts/`.

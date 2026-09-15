@@ -23,7 +23,8 @@ stay in `data/processed/stage4/labels.parquet` and join on `sentence_id`.
 ## Feature table (Stage 7, `data/processed/stage7/features.parquet`)
 
 Canonical table: 6,474 rows from run `20260915T182306Z-3ab408d80a-7452f1c2`, SHA-256
-`f3227c386383701741aa284cc3bbf6b7c3205f2de9593616575bf1187e9a064d` (`docs/stage7_validation.md`).
+`f3227c386383701741aa284cc3bbf6b7c3205f2de9593616575bf1187e9a064d` (`docs/stage7_validation.md`);
+protected with the run by `preanchor backup --for-stage 7` (`docs/backup_restore.md`).
 
 Built by `preanchor build-dataset --config configs/mvp.yaml --run-id <extraction run>` from a
 completed `extract-activations` run; the run keeps the identical table under

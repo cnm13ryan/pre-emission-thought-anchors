@@ -96,7 +96,8 @@ def verify_runs(root: Path, manifest: dict, for_stage: int, report: Report) -> d
     stages = {f"stage{s}" for s in stage_closure(for_stage)}
     loaded: dict[str, dict] = {}
     for run_id, info in sorted(manifest["bundle"]["runs"].items()):
-        if info["role"] == "historical" or info["stage"] not in stages | {"stage5", "stage6"}:
+        if info["role"] == "historical" or info["stage"] not in stages | {"stage5", "stage6",
+                                                                          "stage7"}:
             continue
         directory = root / "artifacts/runs" / run_id
         if not directory.is_dir():
@@ -383,6 +384,97 @@ def verify_stage6(root: Path, manifest: dict, runs: dict, stage3: dict | None,
     return outcome
 
 
+def verify_stage7(root: Path, manifest: dict, runs: dict, stage3: dict | None,
+                  report: Report) -> dict:
+    """The canonical Stage 7 run re-validates on restored bytes with the project's own
+    validators (validate-activations, validate-features), consumed exactly the restored
+    Stage 3/4 tables, and its published feature table is the run's table."""
+    from preanchor.backup.classify import STAGE6_INPUTS, stage7_run_summary
+    from preanchor.config import ExperimentConfig
+    from preanchor.features.dataset import validate_features
+    from preanchor.features.extract import validate_run
+    from preanchor.features.observables import feature_path
+
+    recorded = manifest["scientific_identity"].get("stage7") or {}
+    run_id = recorded.get("run_id")
+    outcome = {"run_id": run_id, "verified": False}
+    if not recorded or not run_id:
+        report.add("stage7_dataset", "Stage 7 identity recorded", False)
+        return outcome
+    run_manifest = runs.get(run_id)
+    run = root / "artifacts/runs" / run_id
+    if run_manifest is None:
+        report.add("stage7_dataset", f"{run_id} loaded", False)
+        return outcome
+    processed = root / "data/processed"
+    current = {name: file_hash(processed / name) for name in STAGE6_INPUTS
+               if (processed / name).is_file()}
+    report.add("input_identity", f"{run_id} consumed the restored Stage 3/4 tables",
+               run_manifest.get("input_hashes") == current == recorded.get("input_hashes"))
+    summary = report.guard("stage7_dataset", f"{run_id} Stage 7 records validate (summary, "
+                           "projection, index, feature table, audit, validation record)",
+                           lambda r=run: stage7_run_summary(r))
+    if not isinstance(summary, dict):
+        return outcome
+    report.add("stage7_dataset", f"{run_id} index, shard, feature hashes and rows == bundle "
+               "identity", summary["index_sha256"] == recorded.get("index_sha256")
+               and summary["features_sha256"] == recorded.get("features_sha256")
+               and summary["shard_sha256"] == recorded.get("shard_sha256")
+               and summary["n_rows"] == recorded.get("n_rows")
+               and summary["n_units"] == recorded.get("n_units"),
+               f"{summary['n_units']} units, {summary['n_rows']} rows")
+    report.add("stage7_dataset", f"{run_id} activation site, dimensions, feature columns and "
+               "head weights == bundle identity",
+               summary["activation_site"] == "block_post_pre_final_norm"
+               and summary["n_layers"] == recorded.get("n_layers")
+               and summary["d_model"] == recorded.get("d_model")
+               and summary["feature_columns"] == recorded.get("feature_columns")
+               and summary["head_weights_sha256"] == recorded.get("head_weights_sha256"))
+    published = feature_path(root)
+    published_ok = published.is_file() and file_hash(published) == summary["features_sha256"]
+    report.add("stage7_dataset", "published data/processed/stage7/features.parquet == the run's "
+               "feature table and bundle identity", published_ok
+               and summary["features_sha256"] == recorded.get("published_features_sha256"))
+    resolved_path = run / "resolved_config.yaml"
+    config = report.guard("config_identity", f"{run_id} resolved config validates and parses "
+                          "under current code",
+                          lambda p=resolved_path: (validate_artifact(p),
+                                                   ExperimentConfig.model_validate(
+                                                       read_yaml(p)))[1])
+    if not isinstance(config, ExperimentConfig):
+        return outcome
+    report.add("config_identity", f"{run_id} resolved-config hash == run identity",
+               config.resolved_hash() == run_manifest["identity"]["resolved_config_hash"])
+    report.add("frozen_settings", f"{run_id} frozen extraction settings (49 sites, float16 "
+               "store, bf16 sdpa, pinned revision)",
+               config.features.get("layers") == list(range(49))
+               and config.features.get("activation_dtype") == "float16"
+               and config.model.dtype == "bfloat16" and config.model.quantization is None
+               and config.model.attention_implementation == "sdpa"
+               and config.model.revision == (manifest["scientific_identity"].get("revisions")
+                                             or {}).get("model"))
+    validated = report.guard("unit_integrity", f"{run_id} validate-activations on restored "
+                             "units and index", lambda r=run, c=config: validate_run(r, c))
+    features = report.guard("unit_integrity", f"{run_id} validate-features on the restored "
+                            "table (coverage, joins, allow-list, invariants, published copy)",
+                            lambda r=run, c=config: validate_features(r, c, root, sample=0,
+                                                                      write_record=False))
+    if isinstance(validated, dict) and isinstance(features, dict):
+        traces = {}
+        if (processed / "stage3/trajectories.parquet").is_file():
+            table = validate_parquet(processed / "stage3/trajectories.parquet")
+            traces = dict(zip(table.column("trajectory_id").to_pylist(),
+                              table.column("full_cot_sha256").to_pylist(), strict=True))
+        index = validate_parquet(run / "activations/index.parquet").to_pylist()
+        report.add("input_identity", f"{run_id} index trace hashes == restored Stage 3 traces "
+                   "and labels hash == restored Stage 4 labels",
+                   all(traces.get(r["trajectory_id"]) == r["trace_sha256"]
+                       and r["labels_sha256"] == current.get("stage4/labels.parquet")
+                       for r in index))
+        outcome.update(verified=True, rows=features["rows"], units=validated["units"])
+    return outcome
+
+
 def verify_source(repo: Path, manifest: dict, runs: dict, for_stage: int,
                   report: Report) -> bool:
     """Is the *current* checkout the one that can continue the producing run?"""
@@ -435,6 +527,9 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
     stage6_outcome = {}
     if 6 in closure:
         stage6_outcome = verify_stage6(root, manifest, runs, stage3, report)
+    stage7_outcome = {}
+    if 7 in closure:
+        stage7_outcome = verify_stage7(root, manifest, runs, stage3, report)
     ready = verify_source(repo, manifest, runs, for_stage, report)
     from preanchor.backup.prepare import physical_origin
 
@@ -456,7 +551,7 @@ def restore_verify(root: Path, portable: Path, selector: str, *, repo: Path,
                   "checkout must equal the producing commit with a clean tree and the "
                   "same uv.lock (check_resume)" if not ready else "checkout matches"),
               "reacquire": manifest["reacquire"], "stage5": outcome,
-              "stage6": stage6_outcome,
+              "stage6": stage6_outcome, "stage7": stage7_outcome,
               "physical_origin": origin, "physical_destination": destination}
     receipt = write_receipt(portable, "restore_verification", {
         "bundle_id": name, "manifest_sha256": result["manifest_sha256"],

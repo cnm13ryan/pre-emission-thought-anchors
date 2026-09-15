@@ -34,6 +34,24 @@ remote() {
   "$SSH" "$host" "cd $REMOTE_REPO && set -a && . ./.env && set +a && $REMOTE_CMD $*"
 }
 
+# The restore push mutates the Lambda-side portable store (objects and manifests, never
+# latest.json), so it holds portable-store:writer on Lambda for the duration of the push
+# (docs/concurrency.md). The lease is released on every exit path, success or failure.
+RESTORE_HOST= RESTORE_SESSION= RESTORE_TOKEN=
+restore_cleanup() {
+  local status=$?
+  if [[ -n $RESTORE_TOKEN ]]; then
+    remote "$RESTORE_HOST" "lease release portable-store:writer --token $RESTORE_TOKEN --reason restore-push-end" >/dev/null \
+      || echo "warning: could not release portable-store:writer on $RESTORE_HOST; reclaim it there" >&2
+    RESTORE_TOKEN=
+  fi
+  if [[ -n $RESTORE_SESSION ]]; then
+    remote "$RESTORE_HOST" "agent close --session $RESTORE_SESSION --outcome restore-push-end" >/dev/null || true
+    RESTORE_SESSION=
+  fi
+  return $status
+}
+
 json_field() {  # json_field <file> <dotted.key>
   python3 - "$1" "$2" <<'PY'
 import json, sys
@@ -250,6 +268,18 @@ cmd_restore() {
   echo "== remote store location"
   remote "$host" "backup store-path --json" > "$work/store.json"
   local remote_store; remote_store=$(json_field "$work/store.json" store)
+  echo "== lease portable-store:writer on $host for the push"
+  remote "$host" "agent register --task restore-push-$bundle --role backup-restore --worktree . --json" \
+    > "$work/session.json" || die "could not register the restore session on $host"
+  RESTORE_HOST=$host
+  RESTORE_SESSION=$(json_field "$work/session.json" session_id)
+  trap restore_cleanup EXIT
+  if ! remote "$host" "lease acquire portable-store:writer --session $RESTORE_SESSION --purpose restore-push --json" \
+      > "$work/lease.json"; then
+    cat "$work/lease.json"
+    die "portable store on $host is held by another writer; nothing was pushed (retry later)"
+  fi
+  RESTORE_TOKEN=$(json_field "$work/lease.json" owner_token)
   echo "== push manifest and required objects to $host:$remote_store (Mac-initiated)"
   object_list "$bundle" > "$work/objects.txt"
   "$RSYNC" -a --ignore-existing --files-from="$work/objects.txt" -- "$BACKUP_DIR/" "$host:$remote_store/"
@@ -257,6 +287,7 @@ cmd_restore() {
     "$BACKUP_DIR/manifests/$bundle.json.sha256" "$host:$remote_store/manifests/"
   echo "== remote object verification"
   remote "$host" "backup verify --bundle $bundle" || die "remote store verification failed"
+  restore_cleanup   # the store is consistent again: release before the (root-side) apply
   if [[ $dry_run == 1 ]]; then
     remote "$host" "restore apply --bundle $bundle --for-stage $stage --dry-run"
     rm -rf "$work"; return 0

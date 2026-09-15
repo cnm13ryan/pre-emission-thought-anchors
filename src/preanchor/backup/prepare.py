@@ -25,6 +25,7 @@ from preanchor.backup.classify import (
 from preanchor.backup.receipts import write_receipt
 from preanchor.backup.store import ObjectStore
 from preanchor.config import config_hash
+from preanchor.control.leases import WRITER_LEASE, require
 from preanchor.manifest import utc_now
 
 
@@ -128,8 +129,14 @@ def plan(root: Path, repo: Path, *, for_stage: int, run_id: str | None = None,
 
 
 def prepare(root: Path, repo: Path, *, for_stage: int, run_id: str | None = None,
-            include_historical: bool = False, allow_dirty: bool = True) -> dict:
-    """Ingest validated payloads, write an immutable manifest, repoint latest, receipt it."""
+            include_historical: bool = False, allow_dirty: bool = True,
+            lease_tokens: dict[str, str] | None = None) -> dict:
+    """Ingest validated payloads, write an immutable manifest, repoint latest, receipt it.
+
+    Mutates the shared store, so the ``portable-store:writer`` lease must be held and its
+    token presented (``lease_tokens`` or ``PREANCHOR_LEASE_TOKENS``). The read-only plan
+    and its blockers come first; the gate sits immediately before the first store write.
+    (The CLI takes the lease before calling, so a contended writer still fails fast.)"""
     root, repo = Path(root), Path(repo)
     summary, inventory = plan(root, repo, for_stage=for_stage, run_id=run_id,
                               include_historical=include_historical)
@@ -140,6 +147,7 @@ def prepare(root: Path, repo: Path, *, for_stage: int, run_id: str | None = None
         raise ValueError("Backup blocked:\n  " + "\n  ".join(inventory.blockers))
     if not any(e.classification == MUST_BACK_UP for e in inventory.entries):
         raise ValueError("Nothing canonical to protect")
+    require([WRITER_LEASE], root=root, tokens=lease_tokens)   # gate before any store write
     portable = portable_root(root)
     store = ObjectStore(portable)
     created = reused = created_bytes = 0

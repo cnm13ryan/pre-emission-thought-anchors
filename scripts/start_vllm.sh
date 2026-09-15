@@ -20,6 +20,11 @@ MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
 REVISION=1df8507178afcc1bef68cd8c393f61a886323761
 HF_HOME=${HF_HOME:-$ROOT/cache/huggingface}
 [[ -r "$HF_HOME" ]] || { echo "HF_HOME is not readable: $HF_HOME" >&2; exit 1; }
+# Ownership gate (docs/concurrency.md): the launcher must hold both leases and present
+# their tokens in PREANCHOR_LEASE_TOKENS. nvidia-smi is telemetry, never the authority.
+PREANCHOR_CMD=${PREANCHOR_CMD:-uv run --frozen preanchor}
+$PREANCHOR_CMD lease check gpu:h100 service:vllm --root "$ROOT" >/dev/null \
+  || { echo 'vLLM start refused: gpu:h100 and service:vllm leases are required' >&2; exit 1; }
 if sudo -n docker ps --format '{{.Names}}' | grep -qx preanchor-vllm; then
   echo 'preanchor-vllm is already running' >&2; exit 1
 fi
