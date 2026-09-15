@@ -474,3 +474,58 @@ def config_hash_of(value: dict) -> str:
 
 if __name__ == "__main__":
     app()
+
+
+@app.command("extract-activations")
+def extract_activations_command(
+    config: Annotated[Path, typer.Option()] = Path("configs/smoke.yaml"),
+    trajectory: Annotated[list[str] | None, typer.Option(
+        help="Trajectory id such as 330:correct; repeatable.")] = None,
+    limit_sentences: Annotated[int | None, typer.Option("--limit-sentences", min=1)] = None,
+    run_id: Annotated[str | None, typer.Option()] = None,
+    resume: Annotated[bool, typer.Option()] = False,
+    pause_seconds: Annotated[float, typer.Option(min=0, max=60,
+                                                 help="Interruption drills only.")] = 0.0,
+) -> None:
+    """Replay trajectories once and store boundary activations as resumable units.
+
+    Without ``--run-id`` a new run is prepared from the current commit and executed.
+    ``--resume --run-id ID`` validates completed units and reruns only missing work.
+    SPEC Stage 7 (all 40 trajectories under configs/mvp.yaml) needs separate authorisation.
+    """
+    from preanchor.features.extract import execute, load_inputs, prepare, select_work
+
+    loaded = load_config(config)
+    root = Settings().persistent_root()
+    persistent_mount(root)
+    repo = Path(__file__).resolve().parents[2]
+    if run_id is None:
+        if resume:
+            raise typer.BadParameter("--resume requires --run-id")
+        inputs, hashes = load_inputs(root)
+        work = select_work(loaded, inputs, trajectory, limit_sentences)
+        command = (f"preanchor extract-activations --config {config}"
+                   + "".join(f" --trajectory {t}" for t in trajectory or [])
+                   + (f" --limit-sentences {limit_sentences}" if limit_sentences else ""))
+        directory = prepare(root, repo, loaded, command, work, hashes)
+    else:
+        if not resume:
+            raise typer.BadParameter("--run-id requires --resume")
+        directory = run_path(run_id)
+    result = execute(directory, repo, loaded, trajectories=trajectory,
+                     limit_sentences=limit_sentences, resume=resume, pause_seconds=pause_seconds)
+    typer.echo(json.dumps(redact({"run_id": directory.name, "created": result["created"],
+                                  "skipped": result["skipped"],
+                                  "n_rows": result["summary"]["n_rows"],
+                                  "diagnostics": result.get("diagnostics")}), sort_keys=True))
+
+
+@app.command("validate-activations")
+def validate_activations_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/smoke.yaml"),
+) -> None:
+    """Re-validate activation units, index and coverage without loading the model."""
+    from preanchor.features.extract import validate_run
+
+    typer.echo(json.dumps(validate_run(run_path(run_id), load_config(config)), sort_keys=True))
