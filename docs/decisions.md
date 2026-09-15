@@ -332,3 +332,38 @@ Stage 3/4 (working tree after `060f6c0`):
   regression test in `f9dd294`; the failed run is retained. Rejected alternative: deleting it.
 - **fact:** Stage 7 admission: measured fit PASS, projection 410 s / $0.28 for 40 units and
   3.31 GB; BLOCKED on the Stage 5 secondary-backup receipt and on explicit authorisation.
+- **choice (portable backup, 2026-09-15):** canonical state is protected as exact bytes in
+  a content-addressed store (`artifacts/portable/objects/sha256/...`) with immutable,
+  self-hashed bundle manifests and append-only receipts; the MacBook mirrors it under
+  `~/preanchor-backups/portable/` and counts a bundle as protected only after its own
+  rehash writes a `pull_verification` receipt. Scientific identity (config hashes,
+  revisions, Stage 3/4 hashes, run IDs, plan and sorted rollout-ID-set hash, frozen
+  generation settings) is recorded separately from physical origin (root, mount, host,
+  GPU, region), which `restore verify` prints but never compares. Rejected alternatives:
+  whole-run rsync snapshots (no deduplication, no per-object verification), regenerating
+  Stage 3/4 on the new filesystem (byte-different `trajectories.parquet` and MiniLM
+  fingerprints changed every rollout ID in the 2026-09-15 reconstruction), and requiring
+  the old filesystem UUID.
+- **choice (path portability, 2026-09-15):** Stage 2/4 `local_path` validation accepts a
+  recorded absolute path that names the same `<run_id>/<run-relative path>`
+  (`io.same_logical_path`); unit key, run ID and upstream content hashes stay strict, and
+  exactly equal legacy paths still validate. Existing Stage 3 tables are not rewritten:
+  the embedded absolute `source_path` is historical provenance because its bytes are part
+  of every Stage 5 rollout ID. Recommendation for the next deliberate schema/identity
+  boundary (a new Stage 3 import that is allowed to change hashes): drop `source_path`
+  from `trajectories.parquet` in favour of the Stage 2 unit key and upstream hash, and
+  record `local_path` as run-relative, so no physical location participates in
+  scientific identity. Rejected alternative: silently migrating the current canonical
+  tables, which would invalidate the finalized production run.
+- **fact (portable backup, 2026-09-15):** first independently verified portable canonical
+  MacBook secondary copy of the finalized H100 Stage 5 lineage (production run
+  `20260915T144926Z-bb9ba695de-9fca4c21`): bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2`, kind `canonical`, highest protected stage 5, 4,282 unique
+  objects, 33,704,252 bytes rehashed on the MacBook, 0 missing, 0 corrupt, outcome
+  `secondary_copy_verified`, receipt `receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` under `~/preanchor-backups/portable/` and
+  copied back to `artifacts/portable/receipts/`. This validates the content-addressed
+  incremental design end-to-end against the real finalized state. A bundle prepared on
+  Lambda/NFS (`prepare` receipt, `secondary_verified: false`) and an independently
+  verified secondary copy (`pull_verification` receipt) are distinct states; only the
+  latter satisfies the backup gate. The MacBook path and filesystem identity are
+  provenance only and never enter scientific identity. Rejected alternative: treating
+  the NFS bundle or the run manifest's `backup` field as verification.

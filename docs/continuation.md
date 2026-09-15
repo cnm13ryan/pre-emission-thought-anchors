@@ -156,9 +156,12 @@ The checksum inventory includes those logical alias paths.
 This closure changes documentation/provenance only, not execution code or frozen
 configuration. The run's execution commit remains unchanged. Push the closure
 commit, transfer the entire run to `~/preanchor-backups/` on the MacBook, and
-verify every checksum there. Secondary verification is pending; do not create
-SAFE_TO_TERMINATE or restart vLLM/Stage 5. Resume requires explicit authorization
-and reconciliation of the original code/config/input identity; never bypass it.
+verify every checksum there. That A6000-era run is superseded (hardware switch,
+then cross-region reconstruction); no repository evidence records an independent
+MacBook verification of it, and none is claimed. The current H100 lineage is
+protected by the portable bundle recorded below. Do not create SAFE_TO_TERMINATE
+on the basis of this section; resume of any run requires reconciliation of the
+original code/config/input identity; never bypass it.
 
 ## 2026-09-15 remediation handoff
 
@@ -180,9 +183,13 @@ sessions closed. All A6000 measurements are in `docs/stage5_measurements.md`.
 State at hand-off (repo at the commit introducing this entry; PR #1 merged into `main`
 as 6ee01ed):
 
-- Persistent root `/lambda/nfs/preanchor/preanchor` on Lambda filesystem UUID
-  `63166b57-881d-4c14-8d52-3c71802fd86b` (68 GB used: artifacts 20 GB, cache 48 GB,
-  data 2.7 MB). The H100 must be launched in the same region to mount it.
+- Persistent root `/lambda/nfs/preanchor/preanchor` was, at that hand-off, Lambda
+  filesystem UUID `63166b57-881d-4c14-8d52-3c71802fd86b` (68 GB used: artifacts 20 GB,
+  cache 48 GB, data 2.7 MB). Superseded: the H100 was launched in another region, that
+  filesystem was not mountable, and the state was reconstructed on
+  `8dd29228-2370-430d-836b-a3e9de7cc148` (see `artifacts/reconstruction/`). A future
+  filesystem never has to preserve an old UUID: restore the portable bundle instead
+  (`docs/backup_restore.md`).
 - Canonical Stage 4: run `20260915T120136Z-b1a2dd9ab0-3b77595c`
   (`labels.parquet` SHA-256 `2049a33f…163d763`), raw run `20260915T113709Z-734a9a5a41-5c37eb5c`.
 - `.env` is untracked and holds secrets plus `PREANCHOR_HOURLY_RATE`; set the rate to the
@@ -227,3 +234,40 @@ uv run preanchor validate-activations --run-id <run> --config configs/mvp.yaml
 Resume: `extract-activations --config configs/mvp.yaml --resume --run-id <run>` (same
 scope; completed units are validated and never rewritten). Stage 7 observables
 (`build-dataset`, `validate-features`) remain unimplemented.
+## Portable backup and cross-region restore (2026-09-15)
+
+`preanchor backup`/`preanchor restore` and `scripts/preanchor_portable.sh` replace the
+per-stage snapshot scripts for all canonical state (`docs/backup_restore.md`). Canonical
+runs on the current filesystem, found from manifests rather than copied IDs: Stage 2
+fetch `20260915T133816Z-d7d055d8b7-73b4c983` (metadata; payload reacquired), Stage 4 raw
+`20260915T134433Z-d7d055d8b7-05a81618` (provenance; 19.6 GB payload reacquired), Stage 4
+build `20260915T141929Z-45b6f6e0cc-07aa7070`, Stage 5 benchmarks
+`20260915T143802Z-bb9ba695de-eee71ef4` and `20260915T144551Z-bb9ba695de-4b18d0f3`, and the
+finalized Stage 5 production run `20260915T144926Z-bb9ba695de-9fca4c21`. The canonical
+bundle is tens of MB (MUST 26.7 MB, SHOULD 8.1 MB); model, dataset and MiniLM caches, the
+vLLM image and the raw payloads are pinned and reacquired. Routine protection is one
+MacBook command: `./scripts/preanchor_portable.sh backup <ssh-host> --for-stage 5`; a
+bundle is a verified secondary copy only once that command prints `BACKUP VERIFIED`.
+Continuation on a new filesystem: clone, check out the producing commit, recreate `.env`,
+`bootstrap_remote.sh`, then `./scripts/preanchor_portable.sh restore <host> --for-stage 5`
+from the MacBook and require `RESTORE VERIFIED` with `Ready to continue Stage 5: YES`.
+
+## Verified MacBook secondary copy of the finalized H100 Stage 5 state (2026-09-15)
+
+The finalized H100 Stage 5 lineage (canonical production run `20260915T144926Z-bb9ba695de-9fca4c21`, Stage 3 complete,
+Stage 4 complete, Stage 5 finalized) has an independently verified MacBook secondary copy:
+
+- bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2` (kind `canonical`, highest protected stage 5);
+- MacBook destination `~/preanchor-backups/portable/`, verification receipt
+  `receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` (also copied back to Lambda under `artifacts/portable/receipts/`);
+- 4,282 unique objects and 33,704,252 bytes rehashed on the MacBook; missing objects 0,
+  corrupt objects 0, outcome `secondary_copy_verified`, script output `BACKUP VERIFIED`;
+- command: `PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor'
+  ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 5` (the override is
+  needed because non-interactive SSH does not put `~/.local/bin` on `PATH`).
+
+The earlier statement that nothing on this filesystem had a secondary copy is resolved
+for this lineage. The backup prerequisite for proceeding beyond the protected Stage 5
+state is satisfied; Stage 6 remains unauthorized until its own gates pass. Physical
+location (`8dd29228-…` virtiofs, host, MacBook path) is provenance only and is not part
+of the scientific identity of the run.
