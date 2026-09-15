@@ -255,7 +255,8 @@ def execute(run: Path, repo: Path, config: ExperimentConfig, *, trajectories=Non
                 if diagnostics if diagnostics is not None else config.execution.mode == "smoke":
                     tokenizer, model = ensure_model()
                     result["diagnostics"] = smoke_diagnostics(
-                        run, stage_dir, config, inputs, work, tokenizer, model, attempt)
+                        run, stage_dir, config, inputs, work, tokenizer, model, attempt,
+                        runtime)
                 manifest["stages"][stage]["state"] = "complete"
                 runtime.pulse(force=True, state="complete")
         except BaseException as exc:
@@ -403,11 +404,14 @@ def mutate_future(ids: list[int], boundary: int, vocab_size: int, seed: int) -> 
 
 
 def invariance_checks(model, ids: list[int], boundaries: list[int], captured, *, atol: float,
-                      seed: int, logit_positions: list[int] | None = None) -> dict:
+                      seed: int, logit_positions: list[int] | None = None,
+                      pulse=None) -> dict:
     """Primary gate: same-shape future mutation. Diagnostic: truncated-prefix replay."""
     vocab = model.config.vocab_size
     per_boundary = []
     for j, b in enumerate(boundaries):
+        if pulse is not None:
+            pulse()  # heartbeat and stop check between replays (AGENTS §10)
         reference = captured[j].float()
         mutated = replay(model, mutate_future(ids, b, vocab, seed + j), [b]).resid[0].float()
         truncated = replay(model, ids[: b + 1], [b]).resid[0].float()
@@ -438,7 +442,7 @@ def invariance_checks(model, ids: list[int], boundaries: list[int], captured, *,
 
 
 def smoke_diagnostics(run: Path, stage_dir: Path, config: ExperimentConfig, inputs: dict,
-                      work, tokenizer, model, attempt: str) -> dict:
+                      work, tokenizer, model, attempt: str, runtime=None) -> dict:
     """SPEC Stage 6: invariance report, boundary audit and observable logit features."""
     import pyarrow as pa
 
@@ -463,7 +467,9 @@ def smoke_diagnostics(run: Path, stage_dir: Path, config: ExperimentConfig, inpu
         stored_vs_fresh = float((captured.float() - fresh.resid.float()).abs().max())
         positions = sorted({0, len(boundaries) // 2, len(boundaries) - 1})
         report = invariance_checks(model, ids, boundaries, fresh.resid, atol=atol,
-                                   seed=config.seed_root, logit_positions=positions)
+                                   seed=config.seed_root, logit_positions=positions,
+                                   pulse=(lambda: runtime.pulse(state="diagnostics"))
+                                   if runtime else None)
         report["stored_fp16_vs_fresh_bf16_max_abs"] = stored_vs_fresh
         reports[tid] = report
         # Observable logit features (SPEC §3.9) from stored final-site states, float32.
