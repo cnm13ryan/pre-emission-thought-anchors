@@ -600,3 +600,35 @@ Stage 3/4 (working tree after `060f6c0`):
   probe exceeds prevalence and the combined observables in point estimate, the paired AUCPR
   interval against the combined observables includes zero, and a position-only baseline is
   competitive. No significance claim; Stage 10 controls remain prespecified and unrun.
+
+## Stage 9 provenance audit and acceptance (2026-09-15, branch `agent/ops/stage9-audit-20260915-16702032`)
+
+- **fact** — The Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d` was produced at clean
+  `67f824a`; its immutable manifest revisions order calibrate (20:11:09–20:12:04) →
+  freeze (20:12:20, `e68f1d82…`) → test claim (20:12:46, same hash, `resumed: false`) →
+  test complete (20:13:32, receipt `a6ef2ba8…`); one `evaluate-test` is recorded, the
+  second invocation (20:13:48) was refused before the claim. Details and evidence paths in
+  `docs/stage9_audit.md`.
+- **fact** — Stage 8 inputs (`selected_model.joblib af63687f…`, pending selection
+  `e1161a5a…`, CV tables `d3aeae70…`/`e755638d…`), the train-only q90
+  `1.3549810893213545`, the CV argmax (site 44 / C 0.1; site 28 / alpha 1e4), the
+  validation-only Platt fit (680 rows, 54 positives; refit reproduces A/B; a val+test fit
+  would differ) and the four test problems `{2236, 2870, 3916, 6998}` were re-derived
+  independently; 810 saved metric/bootstrap values reproduce from the saved predictions
+  (worst |diff| 5.6e-17).
+- **choice** — Classification **ACCEPT**; the run is not rerun and its producing commit
+  remains `67f824a`. Alternative rejected: re-evaluating under the newer control-plane code,
+  which would be a second look at the same four test problems for no scientific gain.
+- **choice** — Integration by one `--no-ff` merge of `8f4b20a` into `a0ebdc3` (`63e2e55`),
+  docs conflicts resolved by appending the Stage 9 sections after the integration record.
+  Alternative rejected: rebasing the Stage 9 branch onto `a0ebdc3`, which would rewrite
+  `67f824a`.
+- **choice** — Post-test changes on the Stage 9 branch (`9e71b1f`: backup classification
+  and verification, read-only `validate_stage9(write_record=False)`, a synthetic fixture
+  constant; `8f4b20a`: documentation) are classified operational; no selection-relevant
+  field changed, so the result stands.
+- **choice** — The Stage 9 bundle was re-prepared under the reviewed writer lease
+  (`20260915T212836Z-99e76aa8…`, 0 new objects) so that `latest.json` names a stage-9
+  bundle for the MacBook `--no-prepare` pull; the unleased `8605ff94…` bundle and the
+  verified Stage 8 bundle `ae33090e…` are preserved. The result is primary-only until the
+  MacBook `pull_verification` receipt exists.
