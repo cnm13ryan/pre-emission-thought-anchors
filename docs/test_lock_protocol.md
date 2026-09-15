@@ -110,3 +110,7 @@ at commit `67f824a`: run `20260915T201107Z-484989d2fe-19f1ab0d`, freeze
 `e68f1d829145431481d81d25c1546773d81e66c3cd3a39a1fdd98f298113e0bf`, calibration fitted on
 680 validation rows / 54 anchors, test evaluated once (689 rows, 25 anchors, 4 problems,
 1 attempt, receipt `a6ef2ba8…`). See `docs/stage9_validation.md`.
+Independent audit (2026-09-15, `docs/stage9_audit.md`): ACCEPT; freeze-before-test,
+exact-hash enforcement, exactly-once evaluation, train-only threshold, validation-only
+calibration and the four test problems re-verified from the immutable manifest revisions
+and the saved artifacts; every saved metric reproduces from the saved predictions.

@@ -397,3 +397,45 @@ backup <host> --for-stage 9`). Stage 10 is not started and not authorised; lead-
 needs a new GPU extraction; the remaining Stage 10 items are CPU-only from stored shards.
 The worktree `~/preanchor-stage9` uses its own `.venv` and needs `git submodule update
 --init` (vendor pins) before the suite passes.
+
+## Stage 9 audit, acceptance, integration and backup (2026-09-15, branch `agent/ops/stage9-audit-20260915-16702032`)
+
+Independent provenance audit of the Stage 9 run (`docs/stage9_audit.md`): **ACCEPT**. The
+canonical Stage 9 result stays `20260915T201107Z-484989d2fe-19f1ab0d`, produced at
+`67f824a` on the Stage 8 run `20260915T193326Z-57bcb41c84-7ebd0db6` (`0d07354`), freeze
+`e68f1d829145431481d81d25c1546773d81e66c3cd3a39a1fdd98f298113e0bf`, test evaluated exactly
+once; nothing was rerun. Before any branch operation the run was copied and hashed into
+`$PREANCHOR_ROOT/control/validation/20260915T204852Z-stage9-audit-snapshot-8f4b20a/`
+(read-only); every Stage 8 and Stage 9 artifact hashed identically after the
+`codex/stage8` fast-forward (`358945f` → `a0ebdc3`, 20:49 UTC) and after the integration
+merge. Integration commit `63e2e55` = `a0ebdc3` (reviewed control plane + Stage 8) +
+`8f4b20a` (Stage 9 branch); the Stage 9 producing commit `67f824a` is an unchanged ancestor
+and is **not** replaced by the merge as the producer of any artifact. Merge-interaction test
+fixes only: the Stage 9 backup tests now grant the `portable-store:writer` fixture lease
+(prepare is gated since the control plane) and the closure test uses an unknown stage 12
+now that stages 8–9 are known; full suite on the fixed tree (`af9f431`): 341 passed, 1
+skipped (GPU-only); ruff at the 22-finding baseline. Backup: bundle
+`20260915T212836Z-99e76aa8ec5fd13b4ce82b2307b4357e044297e24b99d054c626aa2a067fb15b`
+(canonical, protected through stage 9, 6,107 objects, 0 new objects over the verified Stage
+8 store) prepared under the `portable-store:writer` lease of session
+`20260915T204953Z-audit-b7380977` (receipts `20260915T212612Z-lease_acquired…`,
+`20260915T212848Z-lease_released…`), `backup verify` ok (0 missing, 0 corrupt);
+scratch-restored into `/home/ubuntu/preanchor-scratch-restore-stage9` and `restore verify --for-stage 9` passed (158 checks, 0 failed, `scientifically_equivalent: true`, Stage 9 run verified with the test receipt; receipt `20260915T213111Z-restore_verification-99e76aa8ec5f-202c2c95.json`; the scratch root, 3.1 GB, awaits the user's deletion approval); `latest.json` points to it. **Primary-only until the MacBook
+prints `BACKUP VERIFIED`**:
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-s9-audit PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 9 --no-prepare
+```
+
+The earlier Stage 9 bundle `20260915T203439Z-8605ff94…` (prepared at `9e71b1f` without a
+lease, before the control plane reached that branch) and the MacBook-verified Stage 8
+bundle `20260915T204329Z-ae33090e…` are preserved untouched. **Stage 10 readiness:
+BLOCKED only on the MacBook `pull_verification` of the Stage 9 bundle**; everything else
+is satisfied. Stage 10 base: `63e2e55` (or its descendant on the integrated lineage);
+Stage 10 must read the Stage 9 artifacts produced at `67f824a` and must never regenerate
+them, never call `evaluate-test` again, and must not run `preanchor validate-evaluation`
+against the canonical run through the CLI (it rewrites `stages/stage9/validation.json`;
+use `validate_stage9(..., write_record=False)`). A Stage 10 worker
+(`agent/stage10/controls-20260915-0ede0550`, based on `9e71b1f` + `a0ebdc3`) was already
+implementing `probes/stage10.py` at the time of writing; it should merge `63e2e55` before
+running anything.
