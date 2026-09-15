@@ -304,9 +304,19 @@ def run_raw_fetch(directory: Path, repo: Path, config: ExperimentConfig, cache_d
                 "skipped": len(records) - created}
 
 
-def validate_raw_download(directory: Path, repo: Path, config: ExperimentConfig) -> dict:
+def validate_raw_download(directory: Path, repo: Path, config: ExperimentConfig, *,
+                          require_identity: bool = True) -> dict:
+    """Recheck coverage, upstream hashes and unit checksums of a raw-resample run.
+
+    ``require_identity=False`` validates a completed run as an *input* (its code
+    identity may legitimately differ from the current checkout); the manifest is
+    still loaded through its immutable revision.
+    """
+    from preanchor.manifest import load_manifest
+
     discovery = load_raw_discovery(repo, config)
-    manifest = check_resume(directory, repo, config)
+    manifest = check_resume(directory, repo, config) if require_identity \
+        else load_manifest(directory)
     stage = directory / "stages/stage4_raw"
     result = read_json(stage / "source_manifest.json")
     limit = manifest["stages"]["stage4_raw"].get("limit")
@@ -329,6 +339,8 @@ def validate_raw_download(directory: Path, repo: Path, config: ExperimentConfig)
         raise ValueError("Stage completion mismatch")
     return {"state": "passed", "run_id": directory.name, "files": len(records),
             "bytes": sum(r["size"] for r in records),
+            "stage_state": manifest["stages"]["stage4_raw"]["state"],
+            "identity_checked": require_identity,
             "source_manifest_sha256": file_hash(stage / "source_manifest.json")}
 
 

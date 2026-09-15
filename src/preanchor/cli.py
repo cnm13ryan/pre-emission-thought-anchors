@@ -257,6 +257,20 @@ def fetch_raw_resamples_command(
     typer.echo(json.dumps(result, sort_keys=True))
 
 
+@app.command("validate-raw-resamples")
+def validate_raw_resamples_command(
+    run_id: Annotated[str, typer.Option()],
+    config: Annotated[Path, typer.Option()] = Path("configs/mvp.yaml"),
+    require_identity: Annotated[bool, typer.Option()] = False,
+) -> None:
+    """Recheck a raw-resample run's coverage, upstream hashes and unit checksums."""
+    from preanchor.labels.stage4 import validate_raw_download
+
+    result = validate_raw_download(run_path(run_id), Path(__file__).resolve().parents[2],
+                                   load_config(config), require_identity=require_identity)
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
 @app.command("audit-upstream")
 def audit_upstream_command(
     raw_run_id: Annotated[str, typer.Option()],
