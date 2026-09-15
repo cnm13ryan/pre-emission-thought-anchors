@@ -329,3 +329,25 @@ def test_checkpoint_is_idempotent_and_does_not_duplicate_unchanged_telemetry(tmp
     third = checkpoint(run, [row])
     assert len(snapshots()) == 2 and third["files"] == first["files"]
     UnitStore(store.units.root).validate(row["rollout_id"])
+
+
+def test_resumed_benchmark_that_reused_units_cannot_supply_a_projection(tmp_path, monkeypatch):
+    fake_provenance(monkeypatch)
+    config = load_config(ROOT / "configs/pilot.yaml")
+    bench = create_run(tmp_path, ROOT, config, ["bench"])
+    manifest = load_manifest(bench)
+    manifest["stages"]["stage5"] = {"state": "benchmark_complete", "namespace": "benchmark"}
+    save_manifest(bench, manifest)
+    stage = bench / "stages/stage5"
+    for i in range(8):
+        write_json(stage / "benchmark_units" / f"{i:064x}" / "completion.json",
+                   {"runtime_seconds": 100.0, "generated_token_count": 1, "finish_reason": "stop"})
+    from preanchor.io import atomic_bytes, json_bytes
+
+    atomic_bytes(stage / "resource_projection.json", json_bytes(
+        {"elapsed_seconds": 0.4, "peak_vram_mib": 1, "created_this_session": 0}), replace=True)
+    with pytest.raises(ValueError, match="fresh benchmark"):
+        benchmark_evidence(bench, config, [spec()])
+    atomic_bytes(stage / "resource_projection.json", json_bytes(
+        {"elapsed_seconds": 880.0, "peak_vram_mib": 1, "created_this_session": 8}), replace=True)
+    assert benchmark_evidence(bench, config, [spec()])["measured_seconds_per_unit"] == 110.0

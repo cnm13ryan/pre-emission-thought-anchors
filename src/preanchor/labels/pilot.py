@@ -220,9 +220,14 @@ def benchmark_evidence(benchmark_run: Path, config, specs) -> dict:
         raise ValueError("Benchmark prompts are not production fork prompts")
     telemetry_path = stage / "telemetry.json"   # Replaceable live metadata: no sidecar.
     telemetry = json.loads(telemetry_path.read_bytes()) if telemetry_path.exists() else None
-    projection = read_json(stage / "resource_projection.json") \
-        if (stage / "resource_projection.json").exists() else {}
+    projection_path = stage / "resource_projection.json"   # Attempt-level; no sidecar.
+    projection = json.loads(projection_path.read_bytes()) if projection_path.exists() else {}
     wall = projection.get("elapsed_seconds") or projection.get("wall_seconds")
+    created = projection.get("created_this_session")
+    if created is not None and created < len(rows):
+        # A resumed benchmark reused units: its wall time does not measure them.
+        raise ValueError("Benchmark wall time covers fewer units than it reports; "
+                         "run a fresh benchmark")
     request_seconds = [float(r["runtime_seconds"]) for r in rows]
     peak_vram = None
     for candidate in (projection.get("peak_vram_mib"), projection.get("peak_hbm_mib"),

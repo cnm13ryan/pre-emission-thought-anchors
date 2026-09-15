@@ -351,7 +351,7 @@ def run_benchmark(config: Path, count: int, *, run_id: str | None, resume: bool)
 
     from transformers import AutoTokenizer
 
-    from preanchor.io import atomic_bytes, json_bytes, write_json
+    from preanchor.io import atomic_bytes, json_bytes
     from preanchor.labels.generate import (
         ADD_SPECIAL_TOKENS,
         CompletionStore,
@@ -407,10 +407,11 @@ def run_benchmark(config: Path, count: int, *, run_id: str | None, resume: bool)
         record = tokenizer_check(ids, backend.tokenize_ids(prompt))
         expected_tokens[prompt_hash(prompt)] = len(ids)
         records.append({**record, "prompt_sha256": prompt_hash(prompt)})
-    write_json(stage / "tokenizer_validation.json", {
+    # Attempt-level records: a resumed benchmark rewrites them (manifest keeps history).
+    atomic_bytes(stage / "tokenizer_validation.json", json_bytes({
         "tokenizer_id": loaded.model.id, "tokenizer_revision": loaded.model.tokenizer_revision,
         "add_special_tokens": ADD_SPECIAL_TOKENS, "chat_template": None,
-        "per_unit_prompt_token_assertion": True, "prompts": records})
+        "per_unit_prompt_token_assertion": True, "prompts": records}), replace=True)
     store = CompletionStore(stage / "benchmark_units")
     manifest["commands"].append({"command": "pilot-labels --benchmark-only", "count": count,
                                  "resume": resume})
@@ -455,7 +456,7 @@ def run_benchmark(config: Path, count: int, *, run_id: str | None, resume: bool)
                   "projected_base_cost_usd": (seconds_per_unit * 256 / 3600 * rate
                                               if seconds_per_unit else None),
                   "production_started": False}
-    write_json(stage / "resource_projection.json", projection)
+    atomic_bytes(stage / "resource_projection.json", json_bytes(projection), replace=True)
     manifest["stages"]["stage5"]["state"] = "benchmark_complete"
     manifest["output_hashes"]["stage5_benchmark_projection"] = prompt_hash(
         json.dumps(projection, sort_keys=True))
