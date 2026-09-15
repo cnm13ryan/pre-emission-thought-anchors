@@ -70,6 +70,25 @@ that contains Stage 7 backup support (`56aea1b` or a descendant on `codex/stage7
 PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage7 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 7 --no-prepare
 ```
 
+**Stages 8–10.** `--for-stage 8` protects the canonical Stage 8 run (`discover_stage8`:
+finalized fit, selection, validated probes on the canonical Stage 7 inputs), `--for-stage 9`
+the frozen, test-evaluated Stage 9 run on that selection (`discover_stage9`), and
+`--for-stage 10` the complete Stage 10 run whose `input_hashes` are exactly the canonical
+Stage 9 run, its freeze hash and every Stage 9 output hash (`discover_stage10`;
+`STAGE_DEPENDENCIES[10] = (3, …, 9)`). Stage 10 protected bytes: the three tables
+(`metrics/sensitivities.parquet`, `metrics/permutations.parquet`,
+`predictions/lead_time.parquet`), the figures (html/json with sidecars), the 22 immutable
+units under `stages/stage10/units/` and the summary record. An interrupted Stage 10 run and
+a Stage 10 run on other inputs are historical. `restore verify --for-stage 10` re-runs
+`validate-sensitivities` read-only on the restored run (Stage 9 inputs unchanged,
+train-only thresholds with q90 equal to the freeze, frozen-site-only models, lead-one
+mapping, permutation count/seeds/strata). The MacBook pull must run against a checkout
+that contains Stage 10 backup support (the Stage 10 worker branch or a descendant):
+
+```bash
+PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage10 PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor' ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 10
+```
+
 Before terminating a Lambda instance whose persistent filesystem you may never mount
 again: run the `backup` command above and require the literal line `BACKUP VERIFIED` and a
 `pull_verification` receipt under `~/preanchor-backups/portable/receipts/`. Nothing else

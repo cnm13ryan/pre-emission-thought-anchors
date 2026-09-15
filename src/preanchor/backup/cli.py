@@ -119,6 +119,9 @@ def render_plan(summary: dict) -> str:
         if stage == "stage9" and info.get("status") != "absent":
             extra = (f" run={info.get('run_id')} freeze={(info.get('freeze_sha256') or '')[:12]} "
                      f"test_evaluated={info.get('test_evaluated')}")
+        if stage == "stage10" and info.get("status") != "absent":
+            extra = (f" run={info.get('run_id')} units={info.get('n_units')} "
+                     f"stage9={info.get('stage9_run_id')}")
         lines.append(f"  {stage}: {info.get('status')}{extra}")
     lines.append("Classification:")
     for name, row in summary["classification"].items():
