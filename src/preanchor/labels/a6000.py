@@ -237,9 +237,34 @@ def initialize(root, namespace, n, startup):
     write_json(stage / "runtime_admission.json", admission)
     write_json(stage / "tokenizer_validation.json", tokens)
     atomic_bytes(stage / "startup.log", startup.read_bytes())
-    environment = subprocess.check_output(
-        [str(REPO / ".venv/bin/python"), "-m", "torch.utils.collect_env"], text=True
+    collected = subprocess.run(
+        [str(REPO / ".venv/bin/python"), "-m", "torch.utils.collect_env"],
+        text=True,
+        capture_output=True,
+        check=False,
     )
+    atomic_bytes(
+        run / "environment/torch_collect_env_native.txt",
+        (collected.stdout + collected.stderr).encode(),
+    )
+    environment = collected.stdout
+    if collected.returncode:
+        if "get_pip_packages" not in collected.stderr or "splitlines" not in collected.stderr:
+            raise RuntimeError("Unexpected torch environment collector failure")
+        # uv's locked environment intentionally lacks pip. Only package enumeration
+        # changes; every hardware/driver/CUDA probe stays in torch's own collector.
+        environment = subprocess.check_output(
+            [
+                str(REPO / ".venv/bin/python"),
+                "-c",
+                "import torch.utils.collect_env as e; import importlib.metadata as m; "
+                "e.get_pip_packages=lambda *a, **k: ('importlib.metadata', "
+                "'\\n'.join(sorted(d.metadata['Name']+'=='+d.version "
+                "for d in m.distributions()))); "
+                "print(e.get_pretty_env_info())",
+            ],
+            text=True,
+        )
     atomic_bytes(run / "environment/torch_collect_env.txt", environment.encode())
     selected = [s for s in specs if s.sample_idx == 0] if namespace == "benchmark" else specs
     write_json(
