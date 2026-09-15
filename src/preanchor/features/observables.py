@@ -167,6 +167,11 @@ def load_head(config, device: str = "cpu") -> Head:
     local cache; the decoder stack is never loaded (CPU-only stages, AGENTS §8)."""
     import json
 
+    if device != "cpu":
+        from preanchor.control.leases import require
+
+        require(["gpu:h100"])   # the head is small, but it is still the shared GPU
+
     import torch
     from huggingface_hub import hf_hub_download
     from safetensors import safe_open

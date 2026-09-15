@@ -86,8 +86,30 @@ def make_production(root: Path, *, units: int = 256, state: str | None = None,
     return run, specs
 
 
+_WRITER_TOKENS: dict[Path, str] = {}   # plaintext per control root; only the hash is on disk
+
+
+def grant_writer_lease(root: Path, monkeypatch) -> str:
+    """Hold ``portable-store:writer`` for the test and present its token through the
+    environment, exactly as an operator who leased the store would."""
+    from preanchor.control import TOKENS_ENV, control_root, presented_tokens
+    from preanchor.control.leases import WRITER_LEASE, acquire, describe
+    from preanchor.control.sessions import register
+
+    control = control_root(root)
+    if describe(control, WRITER_LEASE)["state"] == "free":
+        session = register(control, task="backup test world", role="tests", worktree=None)
+        _WRITER_TOKENS[control] = acquire(control, WRITER_LEASE, purpose="test",
+                                          session_id=session["session_id"])["owner_token"]
+    token = _WRITER_TOKENS[control]
+    tokens = {**presented_tokens(), WRITER_LEASE: token}
+    monkeypatch.setenv(TOKENS_ENV, ",".join(f"{k}={v}" for k, v in tokens.items()))
+    return token
+
+
 def make_world(root: Path, monkeypatch, **kwargs) -> tuple[Path, list]:
     fake_provenance(monkeypatch)
+    grant_writer_lease(root, monkeypatch)
     write_stage3(root)
     return make_production(root, **kwargs)
 
@@ -151,6 +173,7 @@ def make_stage6_world(root: Path, monkeypatch, *, stage5_units: int = 256, **kwa
     from tiny_qwen2 import write_synthetic_root
 
     fake_provenance(monkeypatch)
+    grant_writer_lease(root, monkeypatch)
     write_synthetic_root(root, load_config(ROOT / "configs/mvp.yaml"))
     make_stage4_runs(root)
     production, specs = make_production(root, units=stage5_units)
