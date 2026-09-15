@@ -257,8 +257,28 @@ analysis.
 interrupted run, the round trip into a new root, read-only verification and tamper
 detection. `backup plan --for-stage 10` on the canonical root: kind canonical, highest
 protected stage 10, 5,001 MUST_BACK_UP items (3.5 GB logical), 217 new objects
-(18.5 MB incremental over the store), no blockers. No bundle was prepared and no MacBook
-copy is claimed by this session.
+(18.5 MB incremental over the store), no blockers.
+
+Bundle **`20260915T221329Z-19f7aef31d0529f4c08e8fde166351fec0cf95953135ce20199509e80e094872`**
+(`--for-stage 10`, canonical, highest protected stage 10, required stages 3–10; 6,666
+entries, 3,785,689,185 B logical, 6,324 unique objects, 217 created / 6,107 reused over the
+MacBook-verified Stage 9 bundle `e6b1a272…`) was prepared at 22:13 UTC from the clean
+checkout `4ff29e0` under `portable-store:writer` held by the CLI's short-lived
+`backup-writer` session (acquired 22:12:11, released 22:13:29, receipts under
+`control/receipts/`); `latest.json` points at it. `backup verify`: 6,324 objects,
+3,541,052,919 B, 0 missing, 0 corrupt. Scratch restore into
+`/lambda/nfs/preanchor/restore-test-stage10-cc4c216b`: 6,666 restored, `RESTORE VERIFIED`,
+scientifically equivalent PASS, every Stage 7/8/9/10 gate PASS including read-only
+`validate-evaluation` and `validate-sensitivities` on the restored runs. Every bundled
+Stage 10 (234), Stage 9 (44) and Stage 8 (1,288) file and the Stage 3/4/7 tables hash
+identically in the scratch root and in the source; the canonical source trees are
+byte-identical before and after the prepare. A model-free readiness probe on the scratch
+root loads the Stage 9 handoff and every SPEC Stage 11 input (Stage 9 predictions/metrics,
+Stage 8 CV tables, Stage 10 tables and figures, Stage 3/4/7 tables) without fitting,
+evaluation or activations. "Ready to continue Stage 10: NO" only because the checkout is
+`4ff29e0`, not the producer `c1e303c`. **Primary-only: the MacBook `pull_verification`
+receipt for `19f7aef3…` is pending and no secondary copy is claimed.** The scratch root
+(3.6 GB on NFS) awaits the user's deletion approval.
 
 ## Limitations
 
