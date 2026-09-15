@@ -388,3 +388,11 @@ Stage 3/4 (working tree after `060f6c0`):
   (`codex/mvp`, no Stage 6 support); the Stage 6 pull must set
   `PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage6` (or the checkout containing
   `128e1d3`). Rejected alternative: modifying `~/preanchor-repo` from this session.
+- **fact (2026-09-15T18:19:39Z):** the MacBook independently verified Stage 6 bundle
+  `20260915T180804Z-f4cd4b0b8f03569ba33b87502010f3d015214a3157469b56d947faf1d73e6d7d`: 4,434
+  objects, 250,021,342 bytes, 0 missing, 0 corrupt, outcome `secondary_copy_verified`,
+  receipt `artifacts/portable/receipts/20260915T181939Z-pull_verification-f4cd4b0b8f03-d185f734.json` copied
+  back to Lambda with a matching sidecar. The "MacBook secondary verification pending" state
+  is resolved and the Stage 6 operational backup gate is satisfied. The append-only receipt
+  is the evidence; no canonical run manifest was rewritten and no replacement bundle was
+  prepared while Stage 7 runs in another session.
