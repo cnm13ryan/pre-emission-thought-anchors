@@ -156,9 +156,12 @@ The checksum inventory includes those logical alias paths.
 This closure changes documentation/provenance only, not execution code or frozen
 configuration. The run's execution commit remains unchanged. Push the closure
 commit, transfer the entire run to `~/preanchor-backups/` on the MacBook, and
-verify every checksum there. Secondary verification is pending; do not create
-SAFE_TO_TERMINATE or restart vLLM/Stage 5. Resume requires explicit authorization
-and reconciliation of the original code/config/input identity; never bypass it.
+verify every checksum there. That A6000-era run is superseded (hardware switch,
+then cross-region reconstruction); no repository evidence records an independent
+MacBook verification of it, and none is claimed. The current H100 lineage is
+protected by the portable bundle recorded below. Do not create SAFE_TO_TERMINATE
+on the basis of this section; resume of any run requires reconciliation of the
+original code/config/input identity; never bypass it.
 
 ## 2026-09-15 remediation handoff
 
@@ -227,3 +230,23 @@ bundle is a verified secondary copy only once that command prints `BACKUP VERIFI
 Continuation on a new filesystem: clone, check out the producing commit, recreate `.env`,
 `bootstrap_remote.sh`, then `./scripts/preanchor_portable.sh restore <host> --for-stage 5`
 from the MacBook and require `RESTORE VERIFIED` with `Ready to continue Stage 5: YES`.
+
+## Verified MacBook secondary copy of the finalized H100 Stage 5 state (2026-09-15)
+
+The finalized H100 Stage 5 lineage (canonical production run `20260915T144926Z-bb9ba695de-9fca4c21`, Stage 3 complete,
+Stage 4 complete, Stage 5 finalized) has an independently verified MacBook secondary copy:
+
+- bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2` (kind `canonical`, highest protected stage 5);
+- MacBook destination `~/preanchor-backups/portable/`, verification receipt
+  `receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` (also copied back to Lambda under `artifacts/portable/receipts/`);
+- 4,282 unique objects and 33,704,252 bytes rehashed on the MacBook; missing objects 0,
+  corrupt objects 0, outcome `secondary_copy_verified`, script output `BACKUP VERIFIED`;
+- command: `PREANCHOR_REMOTE_CMD='/home/ubuntu/.local/bin/uv run --frozen preanchor'
+  ./scripts/preanchor_portable.sh backup preanchor-h100 --for-stage 5` (the override is
+  needed because non-interactive SSH does not put `~/.local/bin` on `PATH`).
+
+The earlier statement that nothing on this filesystem had a secondary copy is resolved
+for this lineage. The backup prerequisite for proceeding beyond the protected Stage 5
+state is satisfied; Stage 6 remains unauthorized until its own gates pass. Physical
+location (`8dd29228-…` virtiofs, host, MacBook path) is provenance only and is not part
+of the scientific identity of the run.
