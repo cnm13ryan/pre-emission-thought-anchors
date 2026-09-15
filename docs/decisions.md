@@ -474,3 +474,14 @@ Stage 3/4 (working tree after `060f6c0`):
   identity are covered by `tests/integration/test_probe_fit.py` on a synthetic Stage 7 run.
 - **interpretation:** smoke CV numbers are training-fold diagnostics of two sites and carry
   no evidence about probe performance; no validation or test metric exists.
+- **fact (production):** run `20260915T191905Z-a2bcc389c7-fc030488` was launched with an
+  untracked log file inside the worktree, so its identity recorded a dirty tree and `select`
+  refused to continue once the log grew; it is superseded and retained. The canonical run
+  `20260915T193326Z-57bcb41c84-7ebd0db6` (clean tree) reproduced the same
+  `cv_results.parquet` bytes (`68ea55b0…`). Logs now live outside the repository.
+- **fact (backup gate):** no stage-7 `pull_verification` receipt existed at launch; the user
+  authorised production explicitly. Recorded in `stages/stage8/resource_projection.json`
+  and `docs/stage8_validation.md`; the Stage 7/8 receipts remain required before Stage 9.
+- **interpretation:** the pending selection (site 44, C 0.1; Ridge site 28, alpha 1e4) and
+  all AUCPR values in `docs/stage8_validation.md` are training-fold diagnostics, not
+  evidence about held-out performance.
