@@ -361,13 +361,15 @@ def value_checks(table, config: ExperimentConfig, vocab_size: int) -> dict:
 
 
 def validate_features(run: Path, config: ExperimentConfig, root: Path, *, sample: int = 64,
-                      device: str | None = None, head_loader=None,
-                      tokenizer_loader=None) -> dict:
+                      device: str | None = None, head_loader=None, tokenizer_loader=None,
+                      write_record: bool = True) -> dict:
     """SPEC Stage 7 validation of the finalized table (no decoder replay).
 
     Row coverage and identity against the activation index and Stage 4 labels, allow-list
     and exclusion checks, definitional invariants, published-copy identity, and an exact
     float32 recomputation of a seeded sample of rows from the stored shards.
+    ``write_record=False`` keeps the check read-only (restore verification must never
+    touch restored bytes).
     """
     stage = features_stage(config)
     manifest = load_manifest(run)
@@ -462,5 +464,6 @@ def validate_features(run: Path, config: ExperimentConfig, root: Path, *, sample
               "eligible_rows": int(sum(table.column("eligible").to_pylist())),
               "anchor_rows": int(sum(table.column("anchor").to_pylist())),
               "validated_at": utc_now()}
-    write_current_json(run / "features" / "feature_validation.json", report)
+    if write_record:
+        write_current_json(run / "features" / "feature_validation.json", report)
     return report
