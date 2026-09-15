@@ -530,7 +530,9 @@ def build_dataset_command(
     device: Annotated[str | None, typer.Option(
         help="Device for the float32 norm+lm_head statistics; default cuda:0 if available.")]
     = None,
-    publish: Annotated[bool, typer.Option()] = True,
+    publish: Annotated[bool | None, typer.Option(
+        help="Publish to data/processed/stage7; default: only for execution mode mvp.")]
+    = None,
 ) -> None:
     """SPEC Stage 7: strict observables joined to Stage 4 labels by sentence_id.
 
@@ -552,7 +554,9 @@ def build_dataset_command(
                                   "device": audit["device"], "units": audit["units"],
                                   "eligible_rows": audit["eligible_rows"],
                                   "anchor_rows": audit["anchor_rows"],
-                                  "published": audit["published"]}), sort_keys=True))
+                                  "published": audit["published"],
+                                  "superseded_publication":
+                                      audit.get("superseded_publication")}), sort_keys=True))
 
 
 @app.command("validate-features")
