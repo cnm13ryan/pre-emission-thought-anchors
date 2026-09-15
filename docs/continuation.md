@@ -205,3 +205,25 @@ The runner is named `a6000` but is hardware-agnostic: it reads the GPU, KV capac
 throughput from the live server and the startup log, and the selection rule, truncation gate
 (5%), and stop rules (10 h / $20) apply unchanged. Use the H100 profile's concurrency values
 as candidate benchmarks; the frozen sampling settings do not change.
+
+
+## Stage 6 smoke closure (2026-09-15, branch `codex/stage6`)
+
+SPEC Stage 6 is complete and documented in `docs/stage6_validation.md` (plan in
+`docs/stage6_plan.md`, amendment `docs/amendments/20260915T170000Z.md`). The extraction
+code lives in `src/preanchor/model/` and `src/preanchor/features/`; commands are
+`preanchor extract-activations` and `preanchor validate-activations`. Stage 7 (all 40
+trajectories under `configs/mvp.yaml`) is **not authorised**: it needs the verified
+Stage 5 secondary backup receipt, explicit user approval, and a projection regenerated at
+the Stage 7 commit. Launch pattern when authorised:
+
+```bash
+uv run preanchor doctor --config configs/mvp.yaml
+tmux new-session -d -s stage7 'cd ~/preanchor-stage6 && set -a && . .env && set +a && \
+  uv run preanchor extract-activations --config configs/mvp.yaml'
+uv run preanchor validate-activations --run-id <run> --config configs/mvp.yaml
+```
+
+Resume: `extract-activations --config configs/mvp.yaml --resume --run-id <run>` (same
+scope; completed units are validated and never rewritten). Stage 7 observables
+(`build-dataset`, `validate-features`) remain unimplemented.
