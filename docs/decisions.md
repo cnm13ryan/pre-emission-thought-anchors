@@ -567,6 +567,72 @@ Stage 3/4 (working tree after `060f6c0`):
   one-time gate check, receipt-before-rename) are documented in `docs/concurrency.md`
   and do not allow two owners or an unaudited takeover.
 
+## Stage 9 implementation and execution (2026-09-15, branch `agent/stage9/validation-freeze-20260915-46c93dfe`)
+
+- **choice:** Stage 9 is its own run whose `input_hashes` name the Stage 8 run and its four
+  selection artifacts, so `check_resume` binds `calibrate`, `freeze-selection` and
+  `evaluate-test` to one code identity (`67f824a`). Rejected: appending to the Stage 8 run
+  (its identity is `0d07354`).
+- **choice (calibrator):** Platt (1999) sigmoid on the selected probe's raw decision score,
+  maximum likelihood against the prior-corrected targets, BFGS, fitted on validation rows
+  only and applied only to the selected binary probe. Rejected: sklearn's private
+  `_SigmoidCalibration` (same estimator, unstable API) and isotonic regression (not the
+  specified method).
+- **choice (freeze hash):** the freeze is the sorted-key JSON of every selection-relevant
+  identity and its SHA-256 is the freeze hash; validation metrics enter only as hashes of
+  the already written files, never as inputs to any choice.
+- **choice (exactly-once):** claim in an immutable manifest revision before reading test,
+  byte-deterministic outputs written with the non-replacing atomic writer, receipt as commit
+  point; a crashed attempt is retried under the same hash and reproduces identical bytes or
+  fails. Rejected: refusing any retry after a crash (would turn an I/O failure into a burned
+  protocol) and a staging-directory rename (not atomic across three files).
+- **choice (bootstrap):** per-trajectory top-10 % statistics are precomputed once and
+  averaged with multiplicity inside each replicate; all models share one problem draw per
+  replicate; seed `derived_seed(seed_root, "bootstrap", split)`.
+- **choice (backup):** the canonical Stage 8 run must fit `n_layers + 1` sites, so the
+  two-site smoke fit on the same inputs stays historical; Stage 9 canonical = the frozen run
+  on the canonical Stage 8 selection, blocker when two are frozen.
+- **fact:** validation: 54 anchors ≥ 20 → calibration fitted (A −0.11335, B 1.88096). Test
+  evaluated once: 25 anchors, primary AUCPR 0.0941 (0.036 … 0.162), gain over the combined
+  observables 0.037 (−0.051 … 0.081), position-only baseline AUCPR 0.139. Residualised
+  control 0.127. No parameter, threshold, layer or calibrator was changed afterwards.
+- **interpretation:** exploratory held-out engineering test on four public problems; the
+  probe exceeds prevalence and the combined observables in point estimate, the paired AUCPR
+  interval against the combined observables includes zero, and a position-only baseline is
+  competitive. No significance claim; Stage 10 controls remain prespecified and unrun.
+
+## Stage 9 provenance audit and acceptance (2026-09-15, branch `agent/ops/stage9-audit-20260915-16702032`)
+
+- **fact** — The Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d` was produced at clean
+  `67f824a`; its immutable manifest revisions order calibrate (20:11:09–20:12:04) →
+  freeze (20:12:20, `e68f1d82…`) → test claim (20:12:46, same hash, `resumed: false`) →
+  test complete (20:13:32, receipt `a6ef2ba8…`); one `evaluate-test` is recorded, the
+  second invocation (20:13:48) was refused before the claim. Details and evidence paths in
+  `docs/stage9_audit.md`.
+- **fact** — Stage 8 inputs (`selected_model.joblib af63687f…`, pending selection
+  `e1161a5a…`, CV tables `d3aeae70…`/`e755638d…`), the train-only q90
+  `1.3549810893213545`, the CV argmax (site 44 / C 0.1; site 28 / alpha 1e4), the
+  validation-only Platt fit (680 rows, 54 positives; refit reproduces A/B; a val+test fit
+  would differ) and the four test problems `{2236, 2870, 3916, 6998}` were re-derived
+  independently; 810 saved metric/bootstrap values reproduce from the saved predictions
+  (worst |diff| 5.6e-17).
+- **choice** — Classification **ACCEPT**; the run is not rerun and its producing commit
+  remains `67f824a`. Alternative rejected: re-evaluating under the newer control-plane code,
+  which would be a second look at the same four test problems for no scientific gain.
+- **choice** — Integration by one `--no-ff` merge of `8f4b20a` into `a0ebdc3` (`63e2e55`),
+  docs conflicts resolved by appending the Stage 9 sections after the integration record.
+  Alternative rejected: rebasing the Stage 9 branch onto `a0ebdc3`, which would rewrite
+  `67f824a`.
+- **choice** — Post-test changes on the Stage 9 branch (`9e71b1f`: backup classification
+  and verification, read-only `validate_stage9(write_record=False)`, a synthetic fixture
+  constant; `8f4b20a`: documentation) are classified operational; no selection-relevant
+  field changed, so the result stands.
+- **choice** — The Stage 9 bundle was re-prepared under the reviewed writer lease
+  (`20260915T212836Z-99e76aa8…`, 0 new objects) so that `latest.json` names a stage-9
+  bundle for the MacBook `--no-prepare` pull; the unleased `8605ff94…` bundle and the
+  verified Stage 8 bundle `ae33090e…` are preserved. The result is primary-only until the
+  MacBook `pull_verification` receipt exists.
+
 ## Stage 10 controls, sensitivities and lead time (2026-09-15, branch `agent/stage10/controls-20260915-0ede0550`, commit `c1e303c`)
 
 - **fact:** Stage 10 ran from the finalized Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d`
