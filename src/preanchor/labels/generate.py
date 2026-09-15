@@ -332,6 +332,24 @@ class CompletionStore:
         # Preserve expensive model output independently of derived scoring.
         self.raw_units = UnitStore(root.parent / (root.name + "_raw"))
 
+    def raw_one(self, spec: CompletionSpec, backend: Backend, *, max_tokens: int,
+                temperature: float, top_p: float) -> tuple[dict, bool]:
+        """Durable generation without loading or sharing a similarity model."""
+        request = {"rollout_id": spec.rollout_id, "seed": spec.seed,
+                   "prompt_sha256": prompt_hash(spec.prompt), "max_tokens": max_tokens,
+                   "temperature": temperature, "top_p": top_p}
+        def writer(directory):
+            result = backend.complete(spec.prompt, seed=spec.seed, max_tokens=max_tokens,
+                                      temperature=temperature, top_p=top_p)
+            write_json(directory / "response.json", result)
+            write_json(directory / "request.json", request)
+        directory, created = self.raw_units.produce(spec.rollout_id, writer)
+        if read_json(directory / "request.json") != request:
+            raise ValueError("Stored request identity mismatch")
+        result = read_json(directory / "response.json")
+        return {**result, **request, "fork_idx": spec.fork_idx,
+                "sample_idx": spec.sample_idx}, created
+
     def run_one(self, spec: CompletionSpec, backend: Backend, *, max_tokens: int,
                 temperature: float, top_p: float,
                 similarity_scorer: SimilarityScorer | None = None,

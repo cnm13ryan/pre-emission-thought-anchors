@@ -2,7 +2,9 @@
 set -euo pipefail
 CONFIG=${1:-configs/pilot.yaml}
 ROOT=${PREANCHOR_ROOT:?PREANCHOR_ROOT must be set}
-IMAGE=${VLLM_IMAGE:-vllm/vllm-openai:v0.28.0}
+IMAGE=vllm/vllm-openai@sha256:61fc8a896b0a4fbbbdc063bc4b0dbc25ce98e02b5050c24aeb7830ac02039b14
+SEQS=${PREANCHOR_REQUEST_CONCURRENCY:-2}
+[[ "$SEQS" =~ ^[123]$ ]] || { echo 'Concurrency must be 1, 2 or 3' >&2; exit 1; }
 MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
 REVISION=1df8507178afcc1bef68cd8c393f61a886323761
 HF_HOME=${HF_HOME:-$ROOT/cache/huggingface}
@@ -19,5 +21,5 @@ printf '%s\n' "$digest" > "$ROOT/artifacts/vllm-image-digest.txt"
 exec sudo -n docker run --rm --name preanchor-vllm --gpus all --ipc=host \
   -p 127.0.0.1:8000:8000 -v "$HF_HOME:/root/.cache/huggingface" "$IMAGE" \
   --model "$MODEL" --revision "$REVISION" --dtype bfloat16 --max-model-len 20480 \
-  --enable-prefix-caching --gpu-memory-utilization 0.92 --max-num-seqs 1 \
+  --enable-prefix-caching --gpu-memory-utilization 0.92 --max-num-seqs "$SEQS" \
   --host 0.0.0.0 --port 8000 --seed 20260914
