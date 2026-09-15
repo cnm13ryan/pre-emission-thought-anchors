@@ -271,3 +271,418 @@ Stage 3/4 (working tree after `060f6c0`):
   `20260915T113457Z` and `20260915T113541Z` (root-owned hub cache), `20260915T120105Z`
   (MiniLM download into the same cache). Transit downloads now use the user-owned
   `cache/huggingface/datasets-hub` (also via `HF_HUB_CACHE` for the audit/build).
+- **choice (Stage 5, H100 session 2026-09-15):** the Stage 5 runner no longer caps
+  in-flight requests at three. `batching.MAX_CONCURRENCY = 16` is a profile ceiling; the
+  admitted concurrency is still derived from the measured GPU KV capacity with the 15%
+  worst-case-context margin (`required_capacity`). `start_vllm.sh` reads only
+  `gpu_memory_utilization` from the selected `configs/lambda/*.yaml` profile (H100 PCIe
+  0.90, A6000 0.92) and keeps `max_model_len` 20480; the profile's 32768 is never used for
+  Stage 5. Admission accepts the measured cards in `a6000.HARDWARE` (RTX A6000, H100 PCIe)
+  and records their vendor bandwidth/BF16 figures for roofline context only. Selection
+  generalizes the B2/B3 rule to an ascending chain: a larger safe concurrency is chosen
+  only when it improves aggregate throughput by at least 10% over the next-smaller safe
+  one. Rejected alternative: SPEC §7.5's fixed "at most four in flight on H100", which is
+  an execution-only default, not a scientific setting; no sampling, prompt, seed, model,
+  dtype or context parameter changed.
+
+## Stage 6 activation-extraction smoke (2026-09-15, branch `codex/stage6`, base `abf7ea5`)
+
+- **fact:** SPEC Stage 6 is the 16-boundary smoke; full extraction is Stage 7 and remains
+  unauthorised. Stage 5 run `20260915T144926Z-bb9ba695de-9fca4c21` is finalised but its
+  secondary backup is unverified (`backup.verified: false`); that gates Stage 7, not Stage 6.
+- **fact (measured, H100 PCIe, disposable probes):** bf16 load 49 s, 28.2 GB VRAM; the
+  longest trace (`3935:incorrect`, 13,087 tokens) replays in 3.0–3.7 s at 30.0 GB peak;
+  repeat replays are bitwise identical; same-shape future-token mutation changes no boundary
+  site; truncated-prefix replay differs for prefixes of 70 and 86 tokens (max abs 4.5 and 2.0
+  at layer 48) and is bitwise identical for the 14 prefixes of 112+ tokens.
+- **choice (user-authorised amendment `docs/amendments/20260915T170000Z.md`, copy under
+  `$PREANCHOR_ROOT/artifacts/amendments/`):** the primary invariance gate is the same-shape
+  future-token mutation at the frozen tolerance; truncated-prefix replay is a recorded
+  diagnostic. No configuration value or hash changed. AGENTS §5.1 still words the gate as
+  prefix-only equality; AGENTS is amended only on explicit instruction, so the wording
+  conflict is recorded here for the user. Rejected alternative: loosening the tolerance.
+- **choice (user decision):** activations are stored for all 6,474 Stage 4 rows; the index
+  carries `eligible`, `eligible_k4`, `exclusion_reason`, `label_source` and the labels hash
+  so the 4,019 eligible rows are a selection, not a re-extraction. SPEC §5's shape
+  `[number_of_sentences, 49, 5120]` permits this; no schema invariant conflicts.
+- **fact (tokenisation):** 2,844 of 6,474 sentences (1,930 eligible) begin after a space
+  whose token spans the space and the first word; per SPEC §3.8 that token is target, so the
+  boundary is the last token of the previous sentence, while the label-generating prefix
+  `full_cot[:char_start]` tokenises to the same prefix plus one `" "` token (2,816 rows;
+  Stage 5 forks 6, 7, 12, 14, 47). Recorded in `docs/alternative_explanations.md`; the
+  frozen boundary definition is unchanged.
+- **choice:** units are one trajectory each, keyed by `ids.cache_key` over the scientific
+  config hash, model and tokenizer revisions, trace hash, token-id hash, boundary-mapping
+  hash, code commit and the Stage 3/4 input hashes; unit contents are deterministic (timings
+  live in attempt records) so a regenerated unit is byte-identical. Shards are named
+  `<problem>_<kind>.safetensors` (the Stage 5 convention) because ids contain a colon.
+  Per-attempt summaries are replaceable current views with immutable attempt copies.
+- **fact:** the worktree's vendor submodules were uninitialised (`provenance()` would fail);
+  `git submodule update --init` restored the pinned commits without changing the lock.
+- **fact (Stage 6 smoke, commit `f9dd294`/`1907c1c`):** runs `20260915T164208Z-29d5f2acb0-7a4c0acd`
+  (16 boundaries), `20260915T165230Z-8b49a551f6-1dfccd21` (SIGTERM drill, 32 rows),
+  `20260915T165641Z-8b49a551f6-c8fcfdfe` (SIGKILL drill, 32 rows) and
+  `20260915T170028Z-8b49a551f6-36843658` (389-row envelope) all complete and validate. The
+  same-shape future-token mutation gate is exactly zero at every site for all 469 boundaries;
+  truncated-prefix replay differs only for prefixes below 108 tokens (max abs 12.0), which is
+  recorded as the sequence-length diagnostic. Regenerated units are byte-identical to the
+  originals. Full evidence: `docs/stage6_validation.md`.
+- **fact:** the first drill run `20260915T164439Z-29d5f2acb0-586ddfe5` failed because the
+  offset check rejected coinciding byte-level spans of a multi-byte character; fixed with a
+  regression test in `f9dd294`; the failed run is retained. Rejected alternative: deleting it.
+- **fact:** Stage 7 admission: measured fit PASS, projection 410 s / $0.28 for 40 units and
+  3.31 GB; BLOCKED on the Stage 5 secondary-backup receipt and on explicit authorisation.
+- **choice (portable backup, 2026-09-15):** canonical state is protected as exact bytes in
+  a content-addressed store (`artifacts/portable/objects/sha256/...`) with immutable,
+  self-hashed bundle manifests and append-only receipts; the MacBook mirrors it under
+  `~/preanchor-backups/portable/` and counts a bundle as protected only after its own
+  rehash writes a `pull_verification` receipt. Scientific identity (config hashes,
+  revisions, Stage 3/4 hashes, run IDs, plan and sorted rollout-ID-set hash, frozen
+  generation settings) is recorded separately from physical origin (root, mount, host,
+  GPU, region), which `restore verify` prints but never compares. Rejected alternatives:
+  whole-run rsync snapshots (no deduplication, no per-object verification), regenerating
+  Stage 3/4 on the new filesystem (byte-different `trajectories.parquet` and MiniLM
+  fingerprints changed every rollout ID in the 2026-09-15 reconstruction), and requiring
+  the old filesystem UUID.
+- **choice (path portability, 2026-09-15):** Stage 2/4 `local_path` validation accepts a
+  recorded absolute path that names the same `<run_id>/<run-relative path>`
+  (`io.same_logical_path`); unit key, run ID and upstream content hashes stay strict, and
+  exactly equal legacy paths still validate. Existing Stage 3 tables are not rewritten:
+  the embedded absolute `source_path` is historical provenance because its bytes are part
+  of every Stage 5 rollout ID. Recommendation for the next deliberate schema/identity
+  boundary (a new Stage 3 import that is allowed to change hashes): drop `source_path`
+  from `trajectories.parquet` in favour of the Stage 2 unit key and upstream hash, and
+  record `local_path` as run-relative, so no physical location participates in
+  scientific identity. Rejected alternative: silently migrating the current canonical
+  tables, which would invalidate the finalized production run.
+- **fact (portable backup, 2026-09-15):** first independently verified portable canonical
+  MacBook secondary copy of the finalized H100 Stage 5 lineage (production run
+  `20260915T144926Z-bb9ba695de-9fca4c21`): bundle `20260915T163333Z-d565605b95187a71851608d5dd1f31ad94eaffe3ae29674084da1462e83132a2`, kind `canonical`, highest protected stage 5, 4,282 unique
+  objects, 33,704,252 bytes rehashed on the MacBook, 0 missing, 0 corrupt, outcome
+  `secondary_copy_verified`, receipt `receipts/20260915T163431Z-pull_verification-d565605b9518-62c783c6.json` under `~/preanchor-backups/portable/` and
+  copied back to `artifacts/portable/receipts/`. This validates the content-addressed
+  incremental design end-to-end against the real finalized state. A bundle prepared on
+  Lambda/NFS (`prepare` receipt, `secondary_verified: false`) and an independently
+  verified secondary copy (`pull_verification` receipt) are distinct states; only the
+  latter satisfies the backup gate. The MacBook path and filesystem identity are
+  provenance only and never enter scientific identity. Rejected alternative: treating
+  the NFS bundle or the run manifest's `backup` field as verification.
+
+## Stage 6 operational closure (2026-09-15, commits `afd3714`..`128e1d3` on `codex/stage6`)
+
+- **fact:** Stage 6 is finalized at `542ee91`; Stage 7 has not started. The portable backup
+  implementation from `codex/mvp` was merged into `codex/stage6` (`afd3714`) so Stage 6
+  classification, tests and the real round trip live on one branch.
+- **choice:** Stage 6 canonical state is every complete Stage 6 run whose recorded inputs
+  are the current Stage 3/4 tables (`discover_stage6`), with activation units under
+  `activations/units` validated by `UnitStore`, and `STAGE_DEPENDENCIES[6] = (3, 4, 5)`
+  because the MVP continuation after Stage 6 needs the fresh pilot. Failed or prepared-only
+  runs and quarantine directories stay historical. Rejected alternative: promoting only the
+  SPEC smoke run and dropping the drill and envelope evidence, or bundling all runs by
+  directory name.
+- **fact:** bundle `20260915T180804Z-f4cd4b0b…` (152 new objects, 216 MB incremental over the
+  verified Stage 5 store) restored into an empty local-disk root and passed
+  `restore verify --for-stage 6`; the MacBook secondary verification is pending and is not
+  claimed. Physical origin/destination are recorded, never compared.
+- **fact:** the MacBook wrapper's remote checkout defaults to `~/preanchor-repo`
+  (`codex/mvp`, no Stage 6 support); the Stage 6 pull must set
+  `PREANCHOR_REMOTE_REPO=/home/ubuntu/preanchor-stage6` (or the checkout containing
+  `128e1d3`). Rejected alternative: modifying `~/preanchor-repo` from this session.
+- **fact (2026-09-15T18:19:39Z):** the MacBook independently verified Stage 6 bundle
+  `20260915T180804Z-f4cd4b0b8f03569ba33b87502010f3d015214a3157469b56d947faf1d73e6d7d`: 4,434
+  objects, 250,021,342 bytes, 0 missing, 0 corrupt, outcome `secondary_copy_verified`,
+  receipt `artifacts/portable/receipts/20260915T181939Z-pull_verification-f4cd4b0b8f03-d185f734.json` copied
+  back to Lambda with a matching sidecar. The "MacBook secondary verification pending" state
+  is resolved and the Stage 6 operational backup gate is satisfied. The append-only receipt
+  is the evidence; no canonical run manifest was rewritten and no replacement bundle was
+  prepared while Stage 7 runs in another session.
+
+## Stage 7 full activation and feature extraction (2026-09-15, branch `codex/stage7`)
+
+- **fact:** Stage 7 admission at launch commit `3c2d4ec`: the Stage 5 MacBook secondary
+  copy (bundle `20260915T163333Z-d565605b…`, receipt `20260915T163431Z-pull_verification-…`)
+  re-verified with the current `preanchor backup verify` (4,282 objects, 0 missing, 0
+  corrupt); production doctor ok; 250 CPU tests and the GPU invariance test pass; projection
+  regenerated at the launch commit (215 s, $0.15, 3.31 GB); 1.94 PB free on NFS. Rejected
+  alternative: treating the run manifests' `backup.verified: false` as the backup state.
+- **choice:** Stage 7 work lives on `codex/stage7`, branched from the `codex/stage6` merge
+  commit `afd3714`, because a sibling session held `codex/stage6` checked out with
+  uncommitted backup changes and per-stage branches (`codex/stage5`, `codex/stage6`) are the
+  established convention. No PR was merged.
+- **fact (production, run `20260915T182306Z-3ab408d80a-7452f1c2`):** 40 units, 6,474 rows,
+  187,579 tokens, 29.1 s of forward time at 6,436 tok/s, peak 29,973 MiB, 322 s extraction
+  wall, 3,314,695,040 shard bytes; `validate-activations`, `build-dataset` (61 s) and
+  `validate-features` (256 rows recomputed exactly) pass; no failure, resume or quarantine.
+  The full `3935:incorrect` shard is byte-identical to the Stage 6 envelope run from
+  commit `f9dd294`.
+- **choice (observables):** next-token statistics apply the pinned `model.norm.weight` and
+  `lm_head.weight`, loaded alone from the snapshot shards and upcast to float32, to the
+  stored float16 `layer=48` states (`features.statistics_dtype: float32`). The Stage 6
+  diagnostic `logit_features.parquet` used the bfloat16 head and differs by up to 0.03–0.05
+  on the smoke rows; it remains a Stage 6 diagnostic. `previous_sentence_tokens` is the
+  token span `[target_token_start, target_token_end)` of `S_{i−1}` (zero for the first
+  sentence). `generated_token_count` counts full-trace tokens after the stored prompt using
+  the trace offsets (no substring re-tokenisation; the prompt decode round-trips exactly in
+  40/40). `diagnostic__relative_completed_trace_position` is `sentence_idx / n_sentences`.
+  Rejected alternatives: computing statistics in the extraction process with the bf16 head;
+  defining the previous-sentence length as the distance between sentence starts (it counts
+  inter-sentence whitespace).
+- **choice (dataset layout):** the feature table carries identity, `split`, the 12 primary
+  observables, the two diagnostics, boundary fields, the activation pointer
+  (`activation_run_id`, `shard_path`, `row_idx`) and the Stage 4 target columns; support
+  counts, convergence and final-answer indices stay in `labels.parquet`. Published path is
+  `data/processed/stage7/features.parquet` (the repository's per-stage convention; SPEC
+  writes `data/processed/features.parquet`). Only the `mvp` configuration publishes; a
+  canonical table with different content is never overwritten; a stale smoke publication is
+  relocated to `data/processed/stage7/superseded/<run_id>/`, never deleted.
+- **fact:** the first smoke run at `1cfa152` published its 16-row table to the canonical
+  path because publication was unconditional; fixed in `3c2d4ec` (fail-closed), the smoke
+  was rerun at `3c2d4ec` and the production build relocated the stale files
+  (`superseded_publication` in `feature_audit.json`). The run and its files are retained.
+- **fact:** the `9bad4b36…960ff` / `14e279c5…fabd7` hashes recorded for `configs/mvp.yaml`
+  in `docs/stage6_plan.md` and `docs/stage6_validation.md` belong to `configs/pilot.yaml`;
+  `configs/mvp.yaml` has resolved to `c8414238…6ef4f` (scientific `82e38884…1a948`) since
+  Stage 0 (`docs/stage0_validation.md`). No configuration changed; the Stage 6 documents
+  are left as written.
+
+## Stage 7 operational closure (2026-09-15, commits `480031e`, `56aea1b` on `codex/stage7`)
+
+- **choice:** the canonical Stage 7 run is discovered as the complete extraction whose
+  `build-dataset` output hash equals the published `data/processed/stage7/features.parquet`
+  on the current Stage 3/4 tables (`discover_stage7`); any other complete Stage 7 run is
+  historical, two publishers block. `STAGE_DEPENDENCIES[7] = (3, 4, 5, 6)`: Stage 3/4 are
+  its inputs, Stage 5 the MVP continuation dependency, Stage 6 its admission evidence.
+  Rejected alternatives: bundling every run with a `stages.stage7` entry, or dropping
+  Stage 6 from the closure (the launch projection lives in a Stage 6-state smoke run).
+- **choice:** protected Stage 7 bytes are the run's `activations/`, `features/` and
+  `stages/stage7/` trees, its manifests and config, and the published table with schema,
+  audit and sidecars; `data/processed/stage7/superseded/` is historical evidence.
+  `restore verify --for-stage 7` reuses the project's own validators
+  (`validate_run`, `validate_features(sample=0, write_record=False)`) instead of a second
+  implementation.
+- **fact:** the first scratch verification rewrote the restored `feature_validation.json`
+  because the verifier called the validator with its record writer on; fixed in `56aea1b`
+  (read-only verification, asserted by the test). The first bundle
+  `20260915T185656Z-038fb6cf…` (357 new objects, 3,118,456,529 B) and the final bundle
+  `20260915T191239Z-161f21fc…` (producer `56aea1b` clean, 0 new objects) have identical
+  content; both scratch restores are retained.
+- **fact:** the final bundle restored into an empty local-disk root and passed
+  `restore verify --for-stage 7` (140 checks, 0 failed); an independent SHA-256 comparison of
+  289 files / 3.32 GB found no mismatch. The MacBook secondary verification is pending and
+  is not claimed. Physical origin/destination are recorded, never compared.
+
+## Stage 8 implementation (2026-09-15, branch `codex/stage8`)
+
+- **choice:** Stage 8 is its own run (`fit` creates it) whose `input_hashes` are the Stage 7
+  feature table, activation index, labels hash and `activation_run_id`. Rejected: appending
+  to the Stage 7 run, which `check_resume` refuses because the code commit differs.
+- **choice (folds):** `StratifiedGroupKFold` shuffled with
+  `derived_seed(seed_root, "cv_folds")` rather than the raw `seed_root`, matching how every
+  other seed is namespaced (`ids.derived_seed`); seeds and validation problems are stored
+  per fold in the manifest. Rejected: `random_state=seed_root` directly.
+- **choice (baseline inputs):** SPEC §3.10 names map to the frozen §3.9 columns as
+  position = `sentence_idx, generated_token_count, prefix_context_fraction`; context =
+  `prefix_token_count, log1p_prefix_token_count, previous_sentence_tokens`; uncertainty =
+  the six log-probability/entropy/margin/top-k columns; combined = all twelve. No column
+  is added or dropped.
+- **choice (selection):** every family selects its own hyperparameter (and site) from
+  train CV; the frozen binary and Ridge selections are those of
+  `activation_plus_observables` (`evaluation.primary_model`). Ridge selection uses Spearman
+  with RMSE tie-break on the `log1p` scale, the scale the probe is fitted on. Remaining ties
+  break to the smaller hyperparameter, then the lower site. The residualised control is
+  fitted only at the selected binary site.
+- **choice (integrity):** units contain no timing or attempt identifiers so regenerated
+  units are byte-identical; `select` refuses to run twice on one run (a new selection needs
+  a new `run_id`); a smoke configuration reads the feature table inside its activation run
+  while `mvp` reads the canonical publication.
+- **fact (smoke, run `20260915T191139Z-30a5e56f6f-5c6fdbe6`):** two-site real-data smoke
+  fits, selects and validates; interruption, resume, corruption/quarantine and deterministic
+  identity are covered by `tests/integration/test_probe_fit.py` on a synthetic Stage 7 run.
+- **interpretation:** smoke CV numbers are training-fold diagnostics of two sites and carry
+  no evidence about probe performance; no validation or test metric exists.
+- **fact (production):** run `20260915T191905Z-a2bcc389c7-fc030488` was launched with an
+  untracked log file inside the worktree, so its identity recorded a dirty tree and `select`
+  refused to continue once the log grew; it is superseded and retained. The canonical run
+  `20260915T193326Z-57bcb41c84-7ebd0db6` (clean tree) reproduced the same
+  `cv_results.parquet` bytes (`68ea55b0…`). Logs now live outside the repository.
+- **fact (backup gate):** no stage-7 `pull_verification` receipt existed at launch; the user
+  authorised production explicitly. Recorded in `stages/stage8/resource_projection.json`
+  and `docs/stage8_validation.md`; the Stage 7/8 receipts remain required before Stage 9.
+- **interpretation:** the pending selection (site 44, C 0.1; Ridge site 28, alpha 1e4) and
+  all AUCPR values in `docs/stage8_validation.md` are training-fold diagnostics, not
+  evidence about held-out performance.
+
+## Control plane v0.1 (2026-09-15, branch `agent/ops/control-plane-v1-20260915-0bd79efc`, base `f6ce263`)
+
+- **fact:** Git worktrees do not isolate the H100, the `preanchor-vllm` container,
+  `$PREANCHOR_ROOT`, the canonical publication paths or the portable store; separate
+  sessions were already running from separate worktrees (`codex/stage7`, `codex/stage8`)
+  against the same root.
+- **choice:** ownership is a persistent per-resource directory under
+  `$PREANCHOR_ROOT/control/leases/`, created with one `mkdir` (atomic on the virtiofs root)
+  and ended with one `rename` into `.archive/`; `owner.json` stores only the SHA-256 of a
+  random owner token, and only that token releases. Rejected: relying on the existing
+  process-scoped `fcntl.flock` (dies with the process, invisible across sessions), a lock
+  file with `O_EXCL` (a killed writer leaves an empty file that carries no owner
+  information), or any daemon/database.
+- **choice:** stale heartbeats never transfer ownership; `reclaim` needs a reason and
+  either positive evidence (owner session closed, or an incomplete acquisition older than
+  the stale window) or `--force` on a stale lease; a live owner process on this host
+  always blocks. Rejected: inferring death from heartbeat age or from `nvidia-smi`.
+- **choice:** gates sit at the real mutation points, before the expensive import or the
+  first store write: `model.load.load_model`, `features.observables.load_head` (non-CPU),
+  `scripts/start_vllm.sh` (after argument validation, before Docker), `backup.prepare.prepare`
+  and `backup.legacy.import_legacy` (after the read-only plan and its blockers). The CLI
+  auto-leases the writer for `backup prepare`/`import-legacy` through a short-lived
+  `backup-writer` session so `scripts/preanchor_portable.sh` is unchanged. Rejected: an
+  advisory-only design, and requiring manual lease commands for every routine backup.
+- **interpretation:** the GPU-only scientific invariance test loads the model and is
+  therefore gated too; a session that runs it holds `gpu:h100` exactly as extraction does.
+- **choice:** `control/` is operational metadata: outside run manifests, config/unit
+  hashes, run IDs and `scientific_identity_hash`, and outside portable bundles (the
+  classifier does not scan it). Including receipts as operational provenance is deferred
+  to v0.2 rather than changing bundle contents silently. Tests that mutate a synthetic
+  store now hold the writer lease through `backup_fixtures.grant_writer_lease`; no
+  scientific test was weakened.
+
+
+## Control plane v0.1 independent review (2026-09-15, branch `agent/ops/control-plane-review-20260915-e1d2bc32`)
+
+- **fact:** review of `dde76ce` from a fresh worktree reproduced the CPU suites (286 passed /
+  1 skipped; scientific 5 passed / 1 skipped) and found one normal-path GPU bypass: the
+  documented `audit-upstream` / `build-labels --device cuda` commands load MiniLM through
+  `labels.similarity.ReplacementSimilarity` / `labels.generate.MiniLMSimilarityScorer`
+  with no lease.
+- **choice:** gate those two constructors on a non-CPU device with `require(["gpu:h100"])`
+  before `sentence_transformers` is imported. Rejected: gating `preanchor doctor`'s 8x8
+  admission kernel (telemetry) and gating the CPU default.
+- **choice:** resource names may not contain `__` (the on-disk escape of `:`), so
+  `gpu__h100` can no longer alias `gpu:h100`'s directory. Rejected: a different escape
+  character (would change the validated on-disk layout).
+- **choice:** the MacBook `restore` holds `portable-store:writer` around its rsync push
+  through a short-lived `backup-restore` session and releases it on every exit path;
+  read-only remote steps and the root-side `restore apply` stay unleased. Rejected: moving
+  the push behind a new CLI command (a redesign of the transfer path).
+- **interpretation:** the remaining limits (per-root authority, `PREANCHOR_CMD` override,
+  one-time gate check, receipt-before-rename) are documented in `docs/concurrency.md`
+  and do not allow two owners or an unaudited takeover.
+
+## Stage 9 implementation and execution (2026-09-15, branch `agent/stage9/validation-freeze-20260915-46c93dfe`)
+
+- **choice:** Stage 9 is its own run whose `input_hashes` name the Stage 8 run and its four
+  selection artifacts, so `check_resume` binds `calibrate`, `freeze-selection` and
+  `evaluate-test` to one code identity (`67f824a`). Rejected: appending to the Stage 8 run
+  (its identity is `0d07354`).
+- **choice (calibrator):** Platt (1999) sigmoid on the selected probe's raw decision score,
+  maximum likelihood against the prior-corrected targets, BFGS, fitted on validation rows
+  only and applied only to the selected binary probe. Rejected: sklearn's private
+  `_SigmoidCalibration` (same estimator, unstable API) and isotonic regression (not the
+  specified method).
+- **choice (freeze hash):** the freeze is the sorted-key JSON of every selection-relevant
+  identity and its SHA-256 is the freeze hash; validation metrics enter only as hashes of
+  the already written files, never as inputs to any choice.
+- **choice (exactly-once):** claim in an immutable manifest revision before reading test,
+  byte-deterministic outputs written with the non-replacing atomic writer, receipt as commit
+  point; a crashed attempt is retried under the same hash and reproduces identical bytes or
+  fails. Rejected: refusing any retry after a crash (would turn an I/O failure into a burned
+  protocol) and a staging-directory rename (not atomic across three files).
+- **choice (bootstrap):** per-trajectory top-10 % statistics are precomputed once and
+  averaged with multiplicity inside each replicate; all models share one problem draw per
+  replicate; seed `derived_seed(seed_root, "bootstrap", split)`.
+- **choice (backup):** the canonical Stage 8 run must fit `n_layers + 1` sites, so the
+  two-site smoke fit on the same inputs stays historical; Stage 9 canonical = the frozen run
+  on the canonical Stage 8 selection, blocker when two are frozen.
+- **fact:** validation: 54 anchors ≥ 20 → calibration fitted (A −0.11335, B 1.88096). Test
+  evaluated once: 25 anchors, primary AUCPR 0.0941 (0.036 … 0.162), gain over the combined
+  observables 0.037 (−0.051 … 0.081), position-only baseline AUCPR 0.139. Residualised
+  control 0.127. No parameter, threshold, layer or calibrator was changed afterwards.
+- **interpretation:** exploratory held-out engineering test on four public problems; the
+  probe exceeds prevalence and the combined observables in point estimate, the paired AUCPR
+  interval against the combined observables includes zero, and a position-only baseline is
+  competitive. No significance claim; Stage 10 controls remain prespecified and unrun.
+
+## Stage 9 provenance audit and acceptance (2026-09-15, branch `agent/ops/stage9-audit-20260915-16702032`)
+
+- **fact** — The Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d` was produced at clean
+  `67f824a`; its immutable manifest revisions order calibrate (20:11:09–20:12:04) →
+  freeze (20:12:20, `e68f1d82…`) → test claim (20:12:46, same hash, `resumed: false`) →
+  test complete (20:13:32, receipt `a6ef2ba8…`); one `evaluate-test` is recorded, the
+  second invocation (20:13:48) was refused before the claim. Details and evidence paths in
+  `docs/stage9_audit.md`.
+- **fact** — Stage 8 inputs (`selected_model.joblib af63687f…`, pending selection
+  `e1161a5a…`, CV tables `d3aeae70…`/`e755638d…`), the train-only q90
+  `1.3549810893213545`, the CV argmax (site 44 / C 0.1; site 28 / alpha 1e4), the
+  validation-only Platt fit (680 rows, 54 positives; refit reproduces A/B; a val+test fit
+  would differ) and the four test problems `{2236, 2870, 3916, 6998}` were re-derived
+  independently; 810 saved metric/bootstrap values reproduce from the saved predictions
+  (worst |diff| 5.6e-17).
+- **choice** — Classification **ACCEPT**; the run is not rerun and its producing commit
+  remains `67f824a`. Alternative rejected: re-evaluating under the newer control-plane code,
+  which would be a second look at the same four test problems for no scientific gain.
+- **choice** — Integration by one `--no-ff` merge of `8f4b20a` into `a0ebdc3` (`63e2e55`),
+  docs conflicts resolved by appending the Stage 9 sections after the integration record.
+  Alternative rejected: rebasing the Stage 9 branch onto `a0ebdc3`, which would rewrite
+  `67f824a`.
+- **choice** — Post-test changes on the Stage 9 branch (`9e71b1f`: backup classification
+  and verification, read-only `validate_stage9(write_record=False)`, a synthetic fixture
+  constant; `8f4b20a`: documentation) are classified operational; no selection-relevant
+  field changed, so the result stands.
+- **choice** — The Stage 9 bundle was re-prepared under the reviewed writer lease
+  (`20260915T212836Z-99e76aa8…`, 0 new objects) so that `latest.json` names a stage-9
+  bundle for the MacBook `--no-prepare` pull; the unleased `8605ff94…` bundle and the
+  verified Stage 8 bundle `ae33090e…` are preserved. The result is primary-only until the
+  MacBook `pull_verification` receipt exists.
+
+## Stage 10 controls, sensitivities and lead time (2026-09-15, branch `agent/stage10/controls-20260915-0ede0550`, commit `c1e303c`)
+
+- **fact:** Stage 10 ran from the finalized Stage 9 run `20260915T201107Z-484989d2fe-19f1ab0d`
+  (freeze `e68f1d82…`, one receipted test evaluation) as its own run
+  `20260915T211903Z-b230473011-815ca2b7`; every Stage 9, Stage 8 and input hash was
+  identical before and after (`docs/stage10_validation.md`). The frozen selection (site 44,
+  C 0.1, q90 = 1.3549810893213545, validation-only Platt) was read, never changed.
+- **choice (base):** the worker branch starts at the Stage 9 head `9e71b1f` and merges the
+  reviewed control plane `a0ebdc3` (`a8ac6ac`; the only conflicts were the order of appended
+  documentation sections). Rejected: basing on the integration branch alone (no Stage 9 code)
+  or on Stage 9 alone (no session/lease registry).
+- **choice (refits):** a sensitivity that changes the training labels or rows (q80/q95, K=4,
+  supported rows, lead one, permutations) refits the family at its Stage 8-frozen site and
+  hyperparameter (`payload["models"]`), with no grid and no layer search; sensitivities that
+  only restrict evaluation rows (subgroups, quintiles) re-score the frozen Stage 9
+  predictions. Both sources are tagged in `metrics/sensitivities.parquet`. Rejected: rerunning
+  Stage 8 selection per sensitivity (a new selection is exactly what Stage 10 must not do).
+- **choice (thresholds):** q80/q90/q95 are `labels/threshold.py::train_threshold` (numpy
+  linear interpolation) over eligible training importance only; the run refuses if the
+  recomputed q90 differs from the freeze. Values: 0.8166508259882914, 1.3549810893213545,
+  1.827347118920559 (identical to Stage 4's `labels_summary.json`).
+- **choice (K=4):** the K=4 sensitivity changes eligibility only (`eligible_k4`) and keeps
+  the frozen q90 threshold, isolating the convergence rule. Rejected: recomputing a quantile
+  on the K=4 set, which would confound two changes.
+- **choice (position quintile):** train-derived cut points on `sentence_idx` (25, 53, 86,
+  129), the allowed §3.9 position quantity, used both as the diagnostic stratifier and as the
+  permutation stratum. Rejected: within-trajectory rank, which needs the completed
+  trajectory length (an excluded quantity).
+- **choice (entropy quintile):** train-derived cut points on `next_token_entropy`.
+- **choice (lead one):** for target S_i the features (site-44 state *and* the twelve
+  observables) come from the stored row of S_(i-1), whose boundary is
+  `target_token_start(S_(i-1)) - 1`; targets with `sentence_idx == 0` are stored as
+  unavailable. The lead-zero comparator is the frozen model restricted to the same rows.
+  Rejected: shifting first sentences to any other boundary; reusing lead-zero observables at
+  lead one (they would leak S_(i-1)'s tokens).
+- **choice (permutations):** 100 permutations of *training* labels within
+  `(problem_id, trace_kind, position_quintile)`, seeds `derived_seed(seed_root,
+  "permutation", k)`, single-class strata left fixed (45 of 95), refit at the frozen site
+  and C, scored against the fixed validation/test labels; the observed statistic is the
+  frozen model's. Rejected: permuting evaluation labels (a different null) or forcing balance
+  across strata.
+- **fact:** `position_quintile 5 / test` has 53 rows and no anchor: reported as undefined,
+  not pooled. Every row has `sample_count = 100`, so the two replacement-support clauses
+  coincide.
+- **fact (tests):** the Stage 9 branch's `test_backup_stage9.py` predates the control plane
+  and needed the writer lease; `test_backup_store.py` asserted that Stage 9 is unknown to
+  `stage_closure` although `9e71b1f` had added it. Both tests were updated to the merged
+  behaviour, neither was weakened.
+- **interpretation:** see `docs/stage10_validation.md`. The primary gain over the combined
+  observables (+0.037 test AUCPR, interval crossing zero) keeps its sign at q80, under K=4
+  and on supported rows, vanishes at q95 and at lead one on test, and lies inside the
+  stratified permutation null (84th percentile on test, 91st on validation). Nothing here
+  reopens Stage 8/9 selection.

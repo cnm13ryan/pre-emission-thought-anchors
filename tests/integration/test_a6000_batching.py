@@ -1,13 +1,24 @@
 """Concurrent scheduling must preserve expensive physical sample identities."""
 
+import subprocess
 import threading
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from preanchor.ids import file_hash
-from preanchor.labels.batching import admitted_concurrency, continuous, required_capacity, roofline
+from preanchor.labels.batching import (
+    MAX_CONCURRENCY,
+    admitted_concurrency,
+    choose,
+    continuous,
+    required_capacity,
+    roofline,
+)
 from preanchor.labels.generate import CompletionSpec, CompletionStore
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def jobs():
@@ -26,6 +37,68 @@ def test_memory_admission():
     assert admitted_concurrency(60089) == 3
     assert admitted_concurrency(40059) == 1
     assert 49 < roofline(2, 2750) < 51
+    # An 80 GB card's measured capacity admits more than the A6000's three, never more
+    # than the profile ceiling, always with the 15% worst-case margin.
+    assert required_capacity(8) == 160237
+    assert admitted_concurrency(160236) == 7
+    assert admitted_concurrency(160237) == 8
+    assert admitted_concurrency(10**9) == MAX_CONCURRENCY
+    with pytest.raises(ValueError, match="Insufficient"):
+        admitted_concurrency(20000)
+    # H100 PCIe vendor figures: the roofline scales with bandwidth, not the A6000 constants.
+    assert roofline(8, 2750, bandwidth=2.0e12, dense_flops=756e12) > roofline(8, 2750)
+
+
+def test_hardware_profiles_drive_admission():
+    from preanchor.labels.a6000 import HARDWARE, MAX_MODEL_LEN, hardware, profile_utilization
+
+    assert MAX_MODEL_LEN == "20480"
+    assert profile_utilization("NVIDIA RTX A6000") == 0.92
+    assert profile_utilization("NVIDIA H100 PCIe") == 0.90
+    assert set(HARDWARE) == {"NVIDIA RTX A6000", "NVIDIA H100 PCIe"}
+    with pytest.raises(ValueError, match="measured cards"):
+        hardware("NVIDIA A100-PCIE-40GB")
+
+
+def test_selection_chain_rule():
+    def candidate(n, rate):
+        return {"concurrency": n, "aggregate_tokens_per_second": rate}
+
+    assert choose([candidate(2, 40.0)])["concurrency"] == 2
+    assert choose([candidate(2, 40.0), candidate(3, 43.9)])["concurrency"] == 2
+    assert choose([candidate(3, 44.0), candidate(2, 40.0)])["concurrency"] == 3
+    # The chain stops at the first step that fails to improve by 10%; later candidates
+    # are not compared against an earlier one they never beat step by step.
+    chain = [candidate(4, 100.0), candidate(8, 150.0), candidate(10, 160.0), candidate(12, 200.0)]
+    assert choose(chain)["concurrency"] == 8
+    with pytest.raises(ValueError, match="Duplicate"):
+        choose([candidate(4, 1.0), candidate(4, 2.0)])
+    with pytest.raises(ValueError, match="No benchmark"):
+        choose([])
+
+
+@pytest.mark.parametrize("seqs", ["0", "17", "2x"])
+def test_start_vllm_rejects_out_of_range_concurrency(tmp_path, seqs):
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/start_vllm.sh"), "configs/lambda/h100_pcie_80.yaml"],
+        env={"PATH": "/usr/bin:/bin", "PREANCHOR_ROOT": str(tmp_path),
+             "PREANCHOR_REQUEST_CONCURRENCY": seqs},
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 1 and "between 1 and 16" in result.stderr
+
+
+def test_start_vllm_reads_only_utilization_from_profile():
+    script = (ROOT / "scripts/start_vllm.sh").read_text()
+    assert 'MAX_MODEL_LEN=20480' in script and "32768" not in script
+    assert "gpu_memory_utilization" in script and '--max-num-seqs "$SEQS"' in script
+    for name, expected in [("h100_pcie_80", "0.90"), ("a6000_48", "0.92")]:
+        util = subprocess.run(
+            ["sed", "-n", r"s/^[[:space:]]*gpu_memory_utilization:[[:space:]]*\([0-9.]*\).*/\1/p",
+             str(ROOT / f"configs/lambda/{name}.yaml")],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        assert util == expected
 
 
 def test_refill_identity_seed_durability_and_resume(tmp_path):
@@ -53,7 +126,7 @@ def test_refill_identity_seed_durability_and_resume(tmp_path):
     def work(spec):
         return store.raw_one(spec, Backend(), max_tokens=16384, temperature=0.6, top_p=0.95)
 
-    records = list(continuous(jobs(), work, 2))
+    records = list(continuous(jobs(), work, 8))
     assert len(records) == len({row["rollout_id"] for _, row, _ in records}) == 8
     assert sorted(calls) == [(s.prompt, s.seed) for s in jobs()]
     for spec, row, created in records:
@@ -80,6 +153,9 @@ def test_duplicate_rejected_before_any_submission():
 
     with pytest.raises(ValueError, match="Duplicate"):
         list(continuous([jobs()[0], jobs()[0]], work, 2))
+    for bad in (0, MAX_CONCURRENCY + 1):
+        with pytest.raises(ValueError, match="Unsupported"):
+            list(continuous(jobs(), work, bad))
 
 
 def test_swapped_response_rejected():

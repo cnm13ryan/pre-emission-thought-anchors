@@ -32,6 +32,7 @@ from preanchor.io import (
     json_bytes,
     lock,
     read_json,
+    same_logical_path,
     validate_artifact,
     validate_parquet,
     write_artifact,
@@ -335,7 +336,7 @@ def validate_raw_download(directory: Path, repo: Path, config: ExperimentConfig,
         key = raw_unit_key(record, discovery, manifest["identity"])
         store.validate(key)
         path = stage / "units" / key / "solutions.json"
-        if (row["unit_key"] != key or row["local_path"] != str(path)
+        if (row["unit_key"] != key or not same_logical_path(row["local_path"], path, directory)
                 or any(row[k] != v for k, v in record.items())
                 or validate_source(path, record) != row["sha256"]):
             raise ValueError("Raw record identity/hash mismatch")
