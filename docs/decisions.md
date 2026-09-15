@@ -208,3 +208,66 @@ Stage 3/4 (working tree after `060f6c0`):
   artifacts are not changed and need a separate audit before interpretation.
   Rejected alternative: silently reusing faulty helpers or silently replacing old
   results. No scientific formula is changed.
+
+## 2026-09-15 remediation of the PR red-team findings (commits `69c05c9`..`HEAD`)
+
+- **fact:** the pre-fix Stage 4 pipeline did not implement SPEC §3.6. The released
+  `chunk_removed` field is the original sentence, so the "without" filter in
+  `importance.py` kept all 100 samples; support units embedded that same text against
+  itself; the smoothed KL used per-distribution category counts; answer normalization
+  removed only closing braces; `importance_legacy` was a copy of canonical. All Stage 4
+  and Stage 5 outputs produced before the fix are marked `PRE_FIX_NON_CANONICAL.json`
+  (index `artifacts/PRE_FIX_NON_CANONICAL_INDEX.json`) and retained as evidence.
+- **fact:** the Stage 5 production run `20260915T111421Z-ab6207e1fa-98852b69` was
+  stopped with SIGTERM (one raw completion, failure record written) and the vLLM
+  container was stopped before any repair; GPU memory returned to 1 MiB.
+- **choice:** canonical importance now uses only fork-i samples whose replacement has
+  pinned-MiniLM cosine similarity strictly below 0.8 to the original sentence, the
+  fork-(i+1) distribution unpooled, the union of normalized answer categories including
+  `<NO_ANSWER>` with one K for both distributions, and alpha 1e-9 (0.5/1.0 recorded
+  as sensitivities). Rejected alternative: keeping any similar replacement.
+- **choice:** `importance_legacy` reproduces the pinned repository arithmetic exactly
+  (`smoothing = 1.0` module default, similar-chunk pooling into the "with" side,
+  missing answers dropped, normalization applied three times along the call path),
+  verified by executing the pinned functions as a test oracle. Rejected alternative:
+  a "legacy-like" approximation.
+- **choice:** answer categories use the pinned `normalize_latex` (MIT, ported with
+  notice). Rejected alternative: the bespoke normalizer.
+- **choice:** eligibility masks are applied in the primary path: first token, final
+  answer sentence (last sentence containing `\boxed{`, and everything after it),
+  missing adjacent fork, convergence (five consecutive forks with accuracy in
+  [0, 0.01] or [0.99, 1]; K=4 recorded as `eligible_k4`), no dissimilar samples, and
+  non-finite importance. Ineligible rows carry no primary label and a reason; the
+  validator enforces one uniform `label_source`. Rejected alternative: unmasked rows.
+- **choice:** raw resamples for all 40 trajectories are pinned in
+  `configs/locks/raw_resample_*` and fetched as immutable units in a provenance run
+  (`20260915T113709Z-734a9a5a41-5c37eb5c`, 6,474 files, 20,996,423,633 bytes, source
+  manifest SHA-256 `43b17324cd2c9cd41b434527e1f0b7a97831fd3f5d1157ad98343e81f1ea3671`).
+  The audit and build reference that run by hash so label fixes never force a
+  re-download. Rejected alternative: hard-coded paths and environment-variable run IDs.
+- **fact (audit):** run `20260915T120136Z-b1a2dd9ab0-3b77595c`: Problem 4682 correct,
+  144 rows with an adjacent fork, 126 compared (18 have no dissimilar replacement),
+  released finite/nonnegative fraction 1.0, Spearman released vs canonical
+  **0.857966**, released vs legacy **0.744655**, canonical vs legacy 0.680600. The
+  frozen >= 0.95 gate still fails; `importance_canonical` remains primary
+  (`label_source = canonical_fallback`). The pre-fix value 0.6217 was an artifact of
+  the missing filter.
+- **fact (build):** 6,474 rows, **4,019 eligible** (K=4: 3,902); exclusions
+  convergence 1,807, no dissimilar samples 608, missing adjacent fork 21, final answer
+  19. Train-only thresholds q80 0.816651, **q90 1.354981**, q95 1.827347; 344 anchors
+  (train 265, validation 54, test 25). Mean dissimilar count 52.7 (median 57); 4,973 of
+  6,434 scored sentences have at least ten dissimilar replacements. Pre-fix values
+  (6,434 "eligible", q90 1.068565) are superseded. Spearman released vs canonical over
+  all eligible rows is 0.8914.
+- **choice (Stage 5):** rollout input hashes are keyed by location-independent names;
+  projections are measured from a named benchmark run at the user-supplied
+  `PREANCHOR_HOURLY_RATE`; every request sends `add_special_tokens=false` and asserts
+  the server's prompt token count per unit; read timeouts are bounded; the cost stop
+  uses wall-clock session time and the truncation stop needs at least 20 rows; W&B
+  snapshots are de-duplicated. The live vLLM tokenize endpoint returned identical IDs
+  with the flag absent, true or false, so no generated prompt was affected; the flag
+  removes a dependence on server defaults. No scientific parameter changed.
+- **fact:** three runs created today failed before doing work and are retained:
+  `20260915T113457Z` and `20260915T113541Z` (root-owned hub cache), `20260915T120105Z`
+  (MiniLM download into the same cache). Transit downloads now use the user-owned
+  `cache/huggingface/datasets-hub` (also via `HF_HUB_CACHE` for the audit/build).

@@ -38,3 +38,22 @@ Legacy contrast excludes missing answers and smooths over the observed union.
 Old `importance.py` and historical Stage 4 outputs remain intact; their support
 normalization defect needs a separate historical audit. The Stage 5 runner never
 uses the whole continuation as its answer category when constructing labels.
+
+## 2026-09-15 corrected Stage 4 audit (run `20260915T120136Z-b1a2dd9ab0-3b77595c`)
+
+The earlier "Stage 4 closure" and "Support-unit optimization closure" entries above
+describe defective outputs (no dissimilarity filter, self-similarity support units) and
+are superseded; those artifacts are marked pre-fix/non-canonical.
+
+| Field | Definition now implemented | Evidence |
+| --- | --- | --- |
+| paper equation | KL(P(A \| dissimilar S_i replacements) ‖ P(A \| S_i)) | SPEC §3.6 |
+| `importance_released` | dataset `counterfactual_importance_kl` | Stage 3 tables |
+| `importance_legacy` | pinned `calculate_counterfactual_importance_kl`: alpha 1.0, `use_similar_chunks=True`, missing answers dropped, `normalize_latex` applied three times, local vocabulary, `p_unsmoothed * log(p/q)` | `tests/integration/test_legacy_parity.py` executes the pinned source as the oracle |
+| `importance_canonical` | union categories incl. `<NO_ANSWER>`, one K, alpha 1e-9, dissimilar-only "without", fork i+1 "with" | `tests/unit/test_importance.py` hand calculations |
+
+Observed differences on Problem 4682 (correct): released vs canonical Spearman 0.857966;
+released vs legacy 0.744655; canonical vs legacy 0.680600. The released field is not
+reproduced by the pinned defaults either, so its exact generation settings remain
+unknown. Primary field: `importance_canonical` (gate failed). The pinned similarity
+model is used at the frozen revision; the pinned repository loads it by name only.

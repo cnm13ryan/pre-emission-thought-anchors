@@ -66,3 +66,18 @@ native torch code; no installed library, driver, CUDA or uv.lock is changed.
 Both lock hashes are therefore identical. Package provenance is independently
 captured in every manifest and environment/packages.json. Alternative rejected:
 installing an unneeded, unpinned pip or hiding the collector failure.
+
+## 2026-09-15 remediation session
+
+- **Mount (fact):** the persistent filesystem now mounts with source
+  `63166b57-881d-4c14-8d52-3c71802fd86b` (virtiofs, rw), not the
+  `b56cf504-...` recorded for Stage 0. Stage 2 (full run) and Stage 3 tables were
+  restored; no pre-fix Stage 4 processed artifacts exist here.
+- **Root-owned hub cache (fact):** `cache/huggingface/hub` is owned by root because the
+  vLLM container mounts it. Dataset transit downloads and the MiniLM model use the
+  user-owned `cache/huggingface/datasets-hub` (CLI fallback; `HF_HUB_CACHE` for
+  audit/build). No ownership on persistent storage was changed.
+- **Rate limiting (fact):** the Hub returned HTTP 429 during the parallel raw fetch;
+  the client's retries succeeded and every unit validated. Lock hashes unchanged.
+- **Hourly rate:** `PREANCHOR_HOURLY_RATE` is required by Stage 5 projections and is
+  currently unset in `.env`.

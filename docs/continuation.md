@@ -159,3 +159,12 @@ commit, transfer the entire run to `~/preanchor-backups/` on the MacBook, and
 verify every checksum there. Secondary verification is pending; do not create
 SAFE_TO_TERMINATE or restart vLLM/Stage 5. Resume requires explicit authorization
 and reconciliation of the original code/config/input identity; never bypass it.
+
+## 2026-09-15 remediation handoff
+
+Stage 4 has been regenerated from scratch with the corrected estimand; see
+`docs/decisions.md` (remediation entry) and `docs/stage4_validation.md`. Canonical
+fallback remains primary (Spearman 0.858 < 0.95). Every Stage 5 output produced before
+the fix is marked non-canonical; production generation must restart from a new
+benchmark and a measured projection with `PREANCHOR_HOURLY_RATE` set. PR #1 and PR #2
+are not merged; the repaired code lives on local `codex/mvp` (not pushed).
