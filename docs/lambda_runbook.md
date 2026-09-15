@@ -5,6 +5,12 @@ Document manual instance setup, persistent storage, private services, recovery a
 Current checkout: `/home/ubuntu/preanchor-repo`; experiment root:
 `/lambda/nfs/preanchor/preanchor`. Never manage Lambda infrastructure or terminate the host.
 
+Fresh instance setup is one command after cloning: `bash scripts/bootstrap_remote.sh`
+(idempotent; see the README section "Fresh remote instance"). It installs only missing
+tools, syncs the locked GPU environment, creates `.env` and the persistent directories,
+and runs the doctor and CPU tests. Rerun it after reboots or pulls; `--quick` skips the
+test suite and production doctor. An unmounted persistent filesystem fails the bootstrap.
+
 The user reports working `nvidia-smi` through normal host SSH. Codex's sandbox cannot
 communicate with it. Stop before any GPU stage and agree with the user how to execute
 the full doctor, `nvidia-smi`, and `torch.utils.collect_env` checks. CPU-only doctor

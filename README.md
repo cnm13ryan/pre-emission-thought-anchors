@@ -8,7 +8,54 @@ The specification owns stage gates and scientific choices. This project uses one
 one public dataset, and 20 problems. The four held-out problems constitute an
 **exploratory held-out engineering test**. No experimental result is available yet.
 
-## Bootstrap
+## Fresh remote instance: one command
+
+On a new Lambda (or any x86_64 Linux) GPU instance with the persistent filesystem
+attached, go from a clone to a runnable, verified project with:
+
+```bash
+git clone --recurse-submodules https://github.com/cnm13ryan/pre-emission-thought-anchors.git ~/preanchor-repo \
+  && cd ~/preanchor-repo && bash scripts/bootstrap_remote.sh
+```
+
+(`--recurse-submodules` is optional; the script initialises the pinned submodules itself.)
+
+`scripts/bootstrap_remote.sh` is idempotent, so rerun it after a reboot, a `git pull`, or
+a failed step. It does, in order: install only missing system tools (`git curl tmux rsync
+findmnt`) via `apt-get`, never upgrading anything; init and verify submodules against
+`configs/locks/upstream.yaml`; install `uv` into `~/.local/bin` if absent; install
+uv-managed Python 3.11; `uv sync --frozen --group dev --extra gpu` from `uv.lock` (CUDA
+12.6 torch 2.7.0); create `.env` from `.env.example` (never overwriting, `chmod 600`) and
+the persistent directories under `PREANCHOR_ROOT`; verify every pinned package, the GPU
+driver, a real BF16 CUDA kernel, Docker access and the pinned vLLM image; then run the
+CPU doctor, the CPU test suite and the production `preanchor doctor`. It ends with a
+summary of repository, Python/torch/CUDA/GPU, persistent storage, test/doctor and vLLM
+image status.
+
+A missing or unwritable persistent filesystem is a hard failure, because every stage
+writes there; `--allow-ephemeral` downgrades it to a warning for code-only setups.
+
+Flags: `--quick` (routine rerun: skip the test suite and the production doctor, keep
+dependency/storage/GPU/environment checks), `--cpu-only` (no torch/CUDA, no GPU checks;
+the default when `nvidia-smi` is absent), `--allow-ephemeral`, `--pull-vllm` (fetch the
+~29 GB pinned vLLM image if missing), `--skip-tests`, `--no-doctor` (skip the production
+doctor only). Switching between GPU and `--cpu-only` re-syncs `.venv` to exactly match
+that mode. The script exits non-zero with the failing step named; recoverable issues
+(missing tokens, absent vLLM image) are collected as warnings and printed at the end.
+
+Afterwards, in every new shell:
+
+```bash
+cd ~/preanchor-repo && set -a && source .env && set +a
+uv run --frozen preanchor --help
+```
+
+Fill `HF_TOKEN`, `WANDB_API_KEY` and the backup/cost fields in `.env` before stages that
+need them. Long jobs still run in tmux per `docs/lambda_runbook.md`.
+
+## Bootstrap (manual steps)
+
+The script above performs these; they remain documented for reference.
 
 ```bash
 uv python install 3.11
