@@ -319,3 +319,16 @@ Stage 3/4 (working tree after `060f6c0`):
   Per-attempt summaries are replaceable current views with immutable attempt copies.
 - **fact:** the worktree's vendor submodules were uninitialised (`provenance()` would fail);
   `git submodule update --init` restored the pinned commits without changing the lock.
+- **fact (Stage 6 smoke, commit `f9dd294`/`1907c1c`):** runs `20260915T164208Z-29d5f2acb0-7a4c0acd`
+  (16 boundaries), `20260915T165230Z-8b49a551f6-1dfccd21` (SIGTERM drill, 32 rows),
+  `20260915T165641Z-8b49a551f6-c8fcfdfe` (SIGKILL drill, 32 rows) and
+  `20260915T170028Z-8b49a551f6-36843658` (389-row envelope) all complete and validate. The
+  same-shape future-token mutation gate is exactly zero at every site for all 469 boundaries;
+  truncated-prefix replay differs only for prefixes below 108 tokens (max abs 12.0), which is
+  recorded as the sequence-length diagnostic. Regenerated units are byte-identical to the
+  originals. Full evidence: `docs/stage6_validation.md`.
+- **fact:** the first drill run `20260915T164439Z-29d5f2acb0-586ddfe5` failed because the
+  offset check rejected coinciding byte-level spans of a multi-byte character; fixed with a
+  regression test in `f9dd294`; the failed run is retained. Rejected alternative: deleting it.
+- **fact:** Stage 7 admission: measured fit PASS, projection 410 s / $0.28 for 40 units and
+  3.31 GB; BLOCKED on the Stage 5 secondary-backup receipt and on explicit authorisation.
