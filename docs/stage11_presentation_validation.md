@@ -102,3 +102,27 @@ there are no hardcoded claims that every interval crosses zero.
 
 No deployment, publication, new evaluation, frozen selection change, or write to
 an existing persistent artifact was performed.
+
+## Interpretation-note follow-up — 2026-09-16
+
+Streamlit now incorporates the supplied `result_interpretation.md` (retained
+unchanged, SHA-256 `6e35e9c2c4306dc7aafcc5bb225c0a4015b09b544f2d62e17745ecfd61556f71`).
+The overview distinguishes a raw association from an established anticipatory
+signal and from evidence that no signal exists. Figure notes explain the missing
+token-identity/semantic controls, remaining reasoning horizon, and the distinction
+between one realized sentence and possible continuations from the same prefix.
+Expandable explanations cover label stability, eligibility, convergence and
+missing answers. Proposed analyses are explicitly unperformed and subject to the
+existing amendment rules; none were executed.
+
+The note's statement about an unlocated fresh pilot is presented as an attributed,
+unverified validation component, not proof that the pilot was never run. Recorded
+validity checks are distinguished from the unresolved interpretation questions.
+The inspector explains that its score concerns the realized stored sentence.
+
+This follow-up changes Streamlit commentary only, through
+`src/preanchor/report/interpretation.py`; report calculations, original plotting
+functions and Stage 3–10 remain unchanged. Streamlit AppTest passed all five pages
+and checked the new overview, layer, lead-time, inspector and pilot caveats. All
+44 files in the saved Stage 9 run retained their pre-test SHA-256 hashes. The full
+suite still cannot collect the two PyTorch-dependent modules in this environment.

@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from preanchor.report import figures as F
+from preanchor.report import interpretation as I
 from preanchor.report import language as L
 from preanchor.report.loaders import Sources, load_stage8, load_stage9, load_stage10
 from preanchor.report.render import _metric_table
@@ -55,6 +56,8 @@ def show_figure(name, fig, report):
     st.plotly_chart(fig, use_container_width=True)
     for label, text in report["interpretations"][name].items():
         st.markdown(f"**{label}:** {text}")
+    if name in I.FIGURE_NOTES:
+        st.info(I.FIGURE_NOTES[name])
 
 
 def reading_guide():
@@ -97,8 +100,33 @@ def _json(path: str) -> dict:
 def page_overview(root: Path, runs: dict[str, str]) -> None:
     st.header("What did we learn?")
     report, _, s9, _, inputs = evidence(str(root), runs)
+    st.info(I.CONCLUSION)
     for point in L.executive_summary(report):
         st.markdown(f"- {point}")
+    st.markdown(
+        "- Neither a special importance-prediction layer nor useful prediction "
+        "one sentence earlier was established."
+    )
+    st.markdown(I.LIMIT)
+    st.subheader("What could explain the association?")
+    st.caption(
+        "Unresolved explanations from result_interpretation.md; "
+        "these are not demonstrated failures."
+    )
+    for title, explanation in I.ALTERNATIVES:
+        with st.expander(title):
+            st.markdown(explanation)
+    with st.expander("What was checked, and what remains unverified?"):
+        st.markdown(I.VALIDITY)
+        st.markdown(I.LABEL_AUDIT)
+        st.warning(I.PILOT_STATUS)
+    with st.expander("Proposed next checks — not performed by this dashboard"):
+        for index, check in enumerate(I.NEXT_CHECKS, 1):
+            st.markdown(f"{index}. {check}")
+        st.caption(
+            "These are proposals, not changes to the frozen experiment. Changes to frozen "
+            "labels, eligibility, baselines or model choices require the amendment process."
+        )
     st.subheader("What does sentence importance mean?")
     st.markdown(L.IMPORTANCE)
     reading_guide()
@@ -127,6 +155,7 @@ def page_overview(root: Path, runs: dict[str, str]) -> None:
 def page_inspector(root: Path, runs: dict[str, str]) -> None:
     st.header("Read a reasoning trace sentence by sentence")
     st.markdown(L.IMPORTANCE)
+    st.info(I.INSPECTOR_NOTE)
     labels = _parquet(str(root / "data/processed/stage4/labels.parquet"))
     features = _parquet(
         str(root / "data/processed/stage7/features.parquet"),
