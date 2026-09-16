@@ -149,6 +149,12 @@ def page_controls(root: Path, runs: dict[str, str]) -> None:
 def main() -> None:
     args = _args()
     artifacts = Path(args.artifacts_root).resolve()
+    if not (artifacts / "runs").is_dir() and (artifacts / "artifacts/runs").is_dir():
+        artifacts = artifacts / "artifacts"  # accept the root itself as well
+    if not (artifacts / "runs").is_dir():
+        st.error(f"No runs directory under {artifacts}; pass <root>/artifacts of a "
+                 "verified restored root (e.g. ~/preanchor-root/artifacts).")
+        st.stop()
     root = artifacts.parent
     st.set_page_config(page_title="preanchor", layout="wide")
     runs = _runs(str(artifacts))
