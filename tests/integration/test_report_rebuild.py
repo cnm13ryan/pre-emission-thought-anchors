@@ -174,3 +174,99 @@ def test_export_interface_matches_vendored_convention(root, tmp_path):
     chunks = json.loads((tmp_path / "exports/problem_1/correct/t1/chunks_labeled.json")
                         .read_bytes())
     assert chunks[0]["importance"] == chunks[0]["importance_canonical"]
+
+
+def _figure_values(figure):
+    """Exclude labels/layout, retain every original plotted coordinate and error bar."""
+    return [
+        {
+            k: v
+            for k, v in trace.items()
+            if k in ("x", "y", "error_x", "error_y")
+            and not (isinstance(v, list) and any(isinstance(x, str) for x in v))
+        }
+        for trace in figure["data"]
+    ]
+
+
+def test_presentation_preserves_original_numbers(root, tmp_path, monkeypatch):
+    import plotly.graph_objects as go
+
+    # Image rendering is covered by the rebuild test; keep this numerical guard quick.
+    monkeypatch.setattr(go.Figure, "to_image", lambda *a, **k: b"presentation-test")
+    original = json.loads(
+        (Path(__file__).parents[1] / "fixtures" / "stage11_presentation_original.json").read_text()
+    )
+    report = _render(root, tmp_path / "report")["report"]
+    for key in ("metric_table", "primary", "bootstrap_test", "gain_over_baseline", "calibration"):
+        assert report[key] == original[key], key
+    for name, values in original["figure_values"].items():
+        figure = json.loads((tmp_path / "report/figures" / f"{name}.json").read_text())
+        assert _figure_values(figure) == values, name
+    markdown = (tmp_path / "report/reports/mvp_result.md").read_text()
+    assert markdown.index("What did we learn?") < markdown.index("Technical details")
+    assert "do not clearly establish an improvement" in markdown
+    assert "Base rate (no skill)" in markdown
+    for name in report["figures"]:
+        html = (tmp_path / "report/figures" / f"{name}.html").read_text()
+        for label in (
+            "Question",
+            "No useful signal",
+            "Observed",
+            "Uncertainty",
+            "Can conclude",
+            "Cannot conclude",
+        ):
+            assert f"{label}:" in html
+
+
+def test_interval_language_handles_other_results():
+    from preanchor.report.language import improvement
+
+    assert "do not clearly establish" in improvement(-0.05, 0.08)
+    assert "do not clearly establish" in improvement(0, 0.08)
+    assert "below zero" in improvement(-0.1, -0.01)
+    assert "above zero" in improvement(0.01, 0.08)
+    assert "unknown" in improvement(None, None)
+
+
+def test_controls_restyle_without_changing_values():
+    from preanchor.report import figures as figures
+    from preanchor.viz import stage10
+
+    rows = []
+    for split in ('test', 'validation'):
+        for analysis, variant in (('threshold', 'q90'), ('position_quintile', '1'),
+                                  ('entropy_quintile', '1'),
+                                  ('lead_time', 'lead0_frozen_same_rows')):
+            for model in (PRIMARY, 'observable_combined', 'prevalence'):
+                rows.append({'analysis': analysis, 'variant': variant, 'split': split,
+                             'model_source': 'frozen_stage9', 'probe_name': model,
+                             'metric': 'average_precision', 'comparison': None,
+                             'value': 0.2, 'boot_low': 0.1, 'boot_high': 0.3,
+                             'n_rows': 20, 'n_positive': 2})
+    perms = [{'kind': kind, 'split': split, 'average_precision': 0.2,
+              'n_rows': 20, 'n_positive': 2}
+             for split in ('test', 'validation') for kind in ('observed', 'permutation')]
+    source = {'sensitivities': pa.Table.from_pylist(rows),
+              'permutations': pa.Table.from_pylist(perms)}
+    before = {
+        'threshold_sensitivity': stage10.threshold_figure(rows),
+        'lead_time_performance': stage10.lead_time_figure(rows),
+        'position_entropy_controls': stage10.position_entropy_figure(rows),
+        'permutation_null': stage10.permutation_figure(perms),
+    }
+    after = figures.control_figures(source, {'saved-input': 'a' * 64})
+    repeated = figures.control_figures(source, {'saved-input': 'a' * 64})
+    for name in before:
+        assert _figure_values(json.loads(before[name].to_json())) == _figure_values(
+            json.loads(after[name].to_json()))
+        assert after[name].to_json() == repeated[name].to_json()
+        assert 'base rate' in after[name].to_json()
+    groups = after['position_entropy_controls']
+    assert 'Sentence position group / test' in [a.text for a in groups.layout.annotations]
+    assert 'quintile' not in groups.to_json()
+    colors = {}
+    for trace in groups.data:
+        colors.setdefault(trace.name, set()).add(trace.marker.color)
+    assert all(len(values) == 1 for values in colors.values())
