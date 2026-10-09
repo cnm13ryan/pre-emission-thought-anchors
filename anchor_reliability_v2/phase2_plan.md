@@ -1,4 +1,4 @@
-# anchor_reliability_v2: preregistration (plan v1)
+# anchor_reliability_v2: preregistration (plan v2)
 
 **Version 1 — 2026-10-09.** Committed and pushed before any confirmatory data is generated
 by this study. Later versions may change PROVISIONAL or OPEN items only before
@@ -200,4 +200,57 @@ These are reported, not silently dropped.
 
 ## 12. Changelog
 
-- v1 (2026-10-09): initial preregistration.
+- v1 (2026-10-09, pushed 07:40 UTC, `991d61c`): initial preregistration.
+- **v2 (2026-10-09, before any Phase 2 data were analysed):** fills in the §3 and §9
+  outcomes from existing data and records one deviation. No FIXED item, threshold or
+  test changes.
+
+## 13. Plan v2 outcomes (computed on existing released data only)
+
+**Primary score (§3 rule): `fork_tv`.** Split-half ICC (N ≈ 50 per half, 95%
+problem-cluster intervals):
+
+| Score | ICC | Interval | Selected? |
+|---|---:|---|---|
+| `fork_tv` | 0.615 | [0.515, 0.676] | yes (highest) |
+| `tv` | 0.557 | [0.477, 0.621] | |
+| `jsd` | 0.526 | [0.418, 0.607] | |
+| `dacc` | 0.394 | [0.348, 0.438] | |
+
+For reference, the MVP KL scores 0.428. Source: `results/s05_reliability.json`.
+
+**Flag threshold (FIXED):** `fork_tv` ≥ its q90 over eligible training-split sentences.
+Values are in `results/s06_power.json` (`q90_thresholds`).
+
+**Power forecast (§9; `results/s06_power.csv`; 200 simulations per cell).** At n = 100:
+
+| Score | Mean ICC | Mean Spearman | P(PASS) | P(FAIL) | P(INCONCLUSIVE) |
+|---|---:|---:|---:|---:|---:|
+| `fork_tv` | 0.733 | 0.622 | 0.00 | **0.98** | 0.02 |
+| `tv` | 0.650 | 0.642 | 0.00 | 0.955 | 0.045 |
+| `jsd` | 0.637 | 0.716 | 0.00 | 0.655 | 0.345 |
+
+At n = 400, `fork_tv` is 0.897 / 0.792 (INCONCLUSIVE with P = 1.00), and `jsd` is the
+only score with P(PASS) > 0.5 (0.74). The simulation is optimistic, because the 100
+released rows stand in for truth.
+
+**§9 rule outcome:** P(INCONCLUSIVE) at n = 100 is 0.02, not above 0.5, so the rule does
+not raise n. **The preregistered forecast for Phase 2 at n = 100 is FAIL**, driven by
+Spearman (expected ≈ 0.62 against the 0.80 threshold). Thresholds are not changed in
+response to this forecast.
+
+**Deviation (recorded, not hidden).** Phase 2 generation started at 2026-10-09 07:56 UTC,
+at the owner's instruction, using the fixed design of `research/redesign/phase2_plan.md`
+(the same forks, seeds, settings and thresholds). That is after plan v1 was pushed, but
+before this v2, before the memorisation report, and with a $250 / 100 h guard set by the
+agent rather than an explicit owner budget. No Phase 2 completion has been read for
+analysis. The only things inspected are operational heartbeat counts: throughput,
+completions and length finishes.
+
+**Pending owner decision (OPEN):**
+- (a) let the n = 100 run finish and report the preregistered result, or
+- (b) stop it, or
+- (c) extend to n = 200/400 by continuing the sample index under the same seeds.
+
+Option (c) would be a new budget decision, taken before any Phase 2 reliability statistic
+is seen.
