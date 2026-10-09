@@ -81,9 +81,16 @@ python scripts/s12_phase2_score.py --index completions_index.parquet \
 - **Eligibility:** the two MVP rules that used future information are replaced, with
   leakage tests.
 - **Memorisation:** 1 of 20 problems flagged (1591), with no verbatim recall.
-- **Prediction (quick run, 2 layers):** activations add +0.03 to +0.06 over the strongest
-  baseline, but every 95% interval includes 0, and lead 1 ≈ lead 0. The full 8-layer
-  results are in `docs/evaluation_results.md`.
+- **Prediction (full run, 8 layers; nested problem-grouped CV over all 20 problems):**
+  - Activations beat every baseline in point estimate: Spearman 0.23 vs 0.15 for
+    `fork_tv`.
+  - 11 of 12 nested-comparison intervals include 0. One just excludes it
+    (+0.048 [+0.001, +0.093]), uncorrected.
+  - The layer curve peaks at 32–40, and layer 0 already gets AP 0.13 against a base rate
+    of 0.11.
+  - Lead 1 ≈ lead 0.
+  - Noise ceiling ≈ 0.87.
+  - Details: `docs/evaluation_results.md`.
 
 ### Assumptions
 
