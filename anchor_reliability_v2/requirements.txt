@@ -1,0 +1,14 @@
+# Analysis environment (versions match the MVP uv.lock where the package exists there).
+numpy==2.2.6
+pandas==2.3.1
+pyarrow==20.0.0
+scipy==1.16.0
+scikit-learn==1.7.1
+requests
+tokenizers
+safetensors
+sentence-transformers==5.0.0
+transformers==4.53.2
+torch==2.7.0
+huggingface_hub==0.33.4
+pytest==8.4.1
