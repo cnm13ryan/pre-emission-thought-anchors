@@ -1,0 +1,200 @@
+{
+ "eligibility": {
+  "both": 4019,
+  "mvp_eligible": 4019,
+  "only_mvp": 0,
+  "only_v2": 731,
+  "rule_counts": {
+   "rule_boxed_before": 1,
+   "rule_converged_mvp": 1835,
+   "rule_converged_pre": 1723,
+   "rule_final_answer_mvp": 19,
+   "rule_fork_i_missing": 0
+  },
+  "v2_eligible": 4750,
+  "v2_label_status": {
+   "MISSING_FORK": 11,
+   "NO_SUPPORT": 627,
+   "OK": 4112
+  }
+ },
+ "parsing": {
+  "answer_changed_share_of_answered": 0.0035321018679566334,
+  "answer_changed_v1_to_v2": 2246,
+  "correct_v2_minus_stored": 218,
+  "top_changes": [
+   {
+    "n": 1442,
+    "v1": "5.0",
+    "v2": "5"
+   },
+   {
+    "n": 136,
+    "v1": "-\\frac12",
+    "v2": "\\frac15"
+   },
+   {
+    "n": 92,
+    "v1": "\\left(\\frac98\\right)^2007",
+    "v2": "(\\frac98)^2007"
+   },
+   {
+    "n": 64,
+    "v1": "-\\frac289259",
+    "v2": "\\frac289259"
+   },
+   {
+    "n": 59,
+    "v1": "6.0",
+    "v2": "6"
+   },
+   {
+    "n": 30,
+    "v1": "6.20",
+    "v2": "6.2"
+   },
+   {
+    "n": 28,
+    "v1": "\\frac{2\\sqrt6}5",
+    "v2": "\\frac2\\sqrt65"
+   },
+   {
+    "n": 25,
+    "v1": "1280",
+    "v2": "640"
+   },
+   {
+    "n": 23,
+    "v1": "\\frac14319683",
+    "v2": "429"
+   },
+   {
+    "n": 20,
+    "v1": "\\frac245",
+    "v2": "-\\frac512"
+   },
+   {
+    "n": 16,
+    "v1": "6.30",
+    "v2": "6.3"
+   },
+   {
+    "n": 14,
+    "v1": "-\\frac{2^2013}4027",
+    "v2": "-\\frac2^20134027"
+   },
+   {
+    "n": 12,
+    "v1": "-\\frac1{2^2007+33}",
+    "v2": "-\\frac12^2007+33"
+   },
+   {
+    "n": 11,
+    "v1": "3.0",
+    "v2": "3"
+   },
+   {
+    "n": 11,
+    "v1": "-\\frac{2^2014}4027",
+    "v2": "-\\frac2^20144027"
+   }
+  ],
+  "v1_answer_v2_nonanswer": 336,
+  "v1_no_answer": 11181,
+  "v1_no_answer_recovered_by_v2": 354,
+  "v2_status_counts": {
+   "answered": 635882,
+   "length_truncated": 10027,
+   "no_answer": 1133,
+   "unboxed_stated": 355,
+   "unterminated_box": 3
+  }
+ },
+ "pathology": {
+  "by_trajectory": {
+   "3448:correct": {
+    "loop": 0.0018,
+    "trunc": 0.0238
+   },
+   "3448:incorrect": {
+    "loop": 0.0008,
+    "trunc": 0.0194
+   },
+   "3550:correct": {
+    "loop": 0.0043,
+    "trunc": 0.1472
+   },
+   "3550:incorrect": {
+    "loop": 0.0072,
+    "trunc": 0.088
+   },
+   "4164:correct": {
+    "loop": 0.0014,
+    "trunc": 0.0222
+   },
+   "4164:incorrect": {
+    "loop": 0.0034,
+    "trunc": 0.055
+   },
+   "6998:correct": {
+    "loop": 0.0003,
+    "trunc": 0.013
+   },
+   "6998:incorrect": {
+    "loop": 0.0002,
+    "trunc": 0.0098
+   }
+  },
+  "forks_trunc_ge_10pct": 260,
+  "forks_trunc_ge_50pct": 2,
+  "loop_rule": "dup_sentence_frac >= 0.5 or max_repeat_run >= 5 (last 8,000 chars)",
+  "nontruncated_loop_share": 0.0005569737029965185,
+  "truncated": 10027,
+  "truncated_loop_share": 0.1005285728532961,
+  "truncated_with_loop_signature": 1008
+ },
+ "recomputed": {
+  "anchor_flag_changed_by_v2_parse_on_v2_rows": 46,
+  "anchors_mvp_definition": 344,
+  "anchors_v2_eligibility_v1_parse": 344,
+  "anchors_v2_eligibility_v2_parse": 366,
+  "kl_v1_on_mvp_eligible": {
+   "median": 0.13926206504636351,
+   "p90": 1.2345552738233756,
+   "prevalence_test": 0.036284470246734396,
+   "prevalence_train": 0.1,
+   "prevalence_validation": 0.07941176470588235,
+   "rows": 4019
+  },
+  "kl_v1_on_v2_eligible": {
+   "median": 0.128958541923216,
+   "p90": 1.2209848247852224,
+   "prevalence_test": 0.03536067892503536,
+   "prevalence_train": 0.09782207456626062,
+   "prevalence_validation": 0.07758620689655173,
+   "rows": 4112
+  },
+  "kl_v2cats_on_v2_eligible": {
+   "median": 0.14075774289118115,
+   "p90": 1.276047710187369,
+   "prevalence_test": 0.04101838755304102,
+   "prevalence_train": 0.10151347360649686,
+   "prevalence_validation": 0.08908045977011494,
+   "rows": 4112
+  },
+  "tv_above_floor_share": 0.545476653696498,
+  "tv_null_floor_median": 0.06511868228772989,
+  "tv_on_v2_eligible": {
+   "median": 0.07129733520336604,
+   "p90": 0.21521428571428577,
+   "rows": 4112
+  },
+  "tv_sensitivity_spearman": {
+   "tv_answers_only": 0.9743444001867365,
+   "tv_nounboxed": 0.9993180622349188,
+   "tv_v1": 0.9950218315286633
+  }
+ },
+ "rollouts": 647400,
+ "stage": "exploratory"
+}
