@@ -66,3 +66,32 @@ def test_activation_projection_fitted_on_training_rows_only():
     s11._PCA_CACHE.clear()
     z2 = s11.act_projection({(0, 0): a2}, 0, 0, tr)
     assert np.allclose(z1[:40], z2[:40])      # training projection unaffected by test rows
+
+
+def test_phase2_scorer_on_identical_replicates_passes_and_on_noise_fails():
+    spec2 = importlib.util.spec_from_file_location("s12", ROOT / "scripts/s12_phase2_score.py")
+    s12 = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(s12)
+    rng = np.random.default_rng(5)
+    rows = []
+    for p in range(10):
+        for i in range(19):
+            k = rng.integers(1, 4)
+            for f in (i, i + 1):
+                for j in range(40):
+                    rows.append({"trajectory_id": f"{p}:c", "fork_idx": f,
+                                 "cat": str(rng.integers(0, k)), "correct": bool(rng.integers(0, 2)),
+                                 "similarity": 0.5})
+    samples = pd.DataFrame(rows)
+    units = [(f"{p}:c", p, i) for p in range(10) for i in range(19)]
+    a = s12.label_table(samples, units)
+    s12.REPS = 200
+    same = s12.agreement(a, a.copy(), {"fork_tv": 0.3}, "t")
+    ft = next(x for x in same if x["score"] == "fork_tv")
+    assert np.isclose(ft["icc"], 1.0) and ft["continuous_form"] == "PASS"
+    shuffled = a.copy()
+    for c in ["fork_tv", "tv", "jsd", "dacc", "kl_1e-9"]:
+        shuffled[c] = rng.permutation(shuffled[c].to_numpy())
+    noise = next(x for x in s12.agreement(a, shuffled, {"fork_tv": 0.3}, "t")
+                 if x["score"] == "fork_tv")
+    assert noise["continuous_form"] == "FAIL"
