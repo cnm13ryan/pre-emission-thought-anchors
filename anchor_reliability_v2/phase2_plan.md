@@ -254,3 +254,12 @@ completions and length finishes.
 
 Option (c) would be a new budget decision, taken before any Phase 2 reliability statistic
 is seen.
+
+## 14. Changelog v2.1 (2026-10-09, before any Phase 2 data were read)
+
+- **Memorisation result** (`docs/memorisation_report.md`): only problem **1591** is
+  flagged (no-reasoning accuracy 0.80), and it is in the Phase 2 selection (`1591:correct`).
+- **Added reporting item (FIXED):** the Phase 2 reliability statistics are also reported
+  with problem 1591 excluded, as a sensitivity. The primary test (all 10 problems) is
+  unchanged.
+- **Owner decision on the running job:** let the n = 100 run finish (option (a) of §13).
