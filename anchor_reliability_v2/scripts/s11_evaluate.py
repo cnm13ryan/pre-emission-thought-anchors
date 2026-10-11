@@ -188,8 +188,12 @@ def evaluate(frame, target, kind, acts, groups, seed, specs_by_model, flag_q=Non
         else:
             y = raw
         ylab[te] = y[te]
+        picked = {}  # this fold's selected spec per model, for dependent searches
         for m, specs in specs_by_model.items():
+            if callable(specs):  # e.g. augment the baseline this fold selected
+                specs = specs(picked)
             (spec, h), _ = inner_select(frame, y, tr, kind, specs, groups, seed + k, acts)
+            picked[m] = spec
             oof[m][te] = run_spec(frame, y, tr, te, kind, spec, h, acts)
             chosen[m].append({"fold": k, "spec": {kk: vv for kk, vv in spec.items()
                                                   if kk != "blocks"} | {"blocks": spec["blocks"]},
@@ -271,8 +275,13 @@ def main() -> None:
     act_specs = [{"blocks": ["act"], "layer": L} for L in LAYERS]
     obs_act = [{"blocks": ["observables", "act"], "layer": L} for L in LAYERS]
     strongest = [{"blocks": [b]} for b in BASELINES]
-    strongest_act = [{"blocks": [b, "act"], "layer": L} for b in ["observables", "markers",
-                                                                   "position"] for L in LAYERS]
+    # Nested by construction: in each outer fold, add activations to the baseline family that
+    # fold's strongest-baseline search selected; inner CV chooses only the layer and penalty.
+    # (Codex review on PR #5: the earlier fixed three-family augmented search could not pair
+    # activations with next_top20, which fold 4 of fork_tv_flag_q90 selected.)
+    def strongest_act(picked):
+        return [{"blocks": [*picked["strongest_baseline"]["blocks"], "act"], "layer": L}
+                for L in LAYERS]
     models = {**base_specs, "strongest_baseline": strongest, "activation": act_specs,
               "observables+activation": obs_act, "strongest+activation": strongest_act}
     pairs = [("observables", "observables+activation"),

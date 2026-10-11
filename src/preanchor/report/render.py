@@ -16,7 +16,13 @@ from pathlib import Path
 from preanchor.io import write_artifact, write_json
 from preanchor.report import figures as F
 from preanchor.report import language as L
-from preanchor.report.loaders import Sources, load_stage8, load_stage9, load_stage10
+from preanchor.report.loaders import (
+    Sources,
+    check_lineage,
+    load_stage8,
+    load_stage9,
+    load_stage10,
+)
 
 MARKDOWN_NOTE = (
     "The primary endpoint is an exploratory engineering evaluation on"
@@ -183,6 +189,8 @@ def render_report(
     s9 = load_stage9(sources, stage9_run_id)
     s10 = load_stage10(sources, stage10_run_id)
     s8 = load_stage8(sources, stage8_run_id)
+    check_lineage(sources, s9, stage8_run_id=stage8_run_id, stage9_run_id=stage9_run_id,
+                  stage10_run_id=stage10_run_id)
     inputs = sources.ledger()
 
     by_split = {

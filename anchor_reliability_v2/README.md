@@ -89,8 +89,9 @@ python scripts/s12_phase2_score.py --index completions_index.parquet \
 - **Prediction (full run, 8 layers; nested problem-grouped CV over all 20 problems):**
   - Activations beat every baseline in point estimate: Spearman 0.23 vs 0.15 for
     `fork_tv`.
-  - 11 of 12 nested-comparison intervals include 0. One just excludes it
-    (+0.048 [+0.001, +0.093]), uncorrected.
+  - All 12 nested-comparison intervals include 0. One previously appeared to exclude it
+    (+0.048 [+0.001, +0.093]), but that came from a non-nested comparator. Corrected, it is
+    +0.036 [−0.002, +0.085] (`docs/evaluation_results.md`).
   - The layer curve peaks at 32–40, and layer 0 already gets AP 0.13 against a base rate
     of 0.11.
   - Lead 1 ≈ lead 0.

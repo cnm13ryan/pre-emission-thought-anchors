@@ -19,7 +19,15 @@ import streamlit as st
 from preanchor.report import figures as F
 from preanchor.report import interpretation as I
 from preanchor.report import language as L
-from preanchor.report.loaders import Sources, load_stage8, load_stage9, load_stage10
+from preanchor.report.loaders import (
+    Sources,
+    check_lineage,
+    find_stage5_pilot,
+    load_stage5_pilot,
+    load_stage8,
+    load_stage9,
+    load_stage10,
+)
 from preanchor.report.render import _metric_table
 
 PRIMARY = "activation_plus_observables"
@@ -31,6 +39,8 @@ def evidence(root: str, runs: dict):
     s8 = load_stage8(sources, runs["stage8"])
     s9 = load_stage9(sources, runs["stage9"])
     s10 = load_stage10(sources, runs["stage10"])
+    check_lineage(sources, s9, stage8_run_id=runs["stage8"], stage9_run_id=runs["stage9"],
+                  stage10_run_id=runs["stage10"])
     test = s9["metrics_test"]
     boot = test["bootstrap"]["binary"][PRIMARY]["average_precision"]
     gain = test["bootstrap"]["aucpr_gain_over_baseline"]
@@ -88,6 +98,17 @@ def _runs(artifacts: str) -> dict[str, str]:
 
 
 @st.cache_data
+def _pilot(root: str) -> dict | None:
+    run_id = find_stage5_pilot(Path(root))
+    if run_id is None:
+        return None
+    try:
+        return {"run_id": run_id, **load_stage5_pilot(Sources(Path(root)), run_id)}
+    except (FileNotFoundError, ValueError):  # missing or failing sidecar: unverified
+        return None
+
+
+@st.cache_data
 def _parquet(path: str, columns: tuple[str, ...] | None = None) -> pd.DataFrame:
     return pd.read_parquet(path, columns=list(columns) if columns else None)
 
@@ -119,7 +140,8 @@ def page_overview(root: Path, runs: dict[str, str]) -> None:
     with st.expander("What was checked, and what remains unverified?"):
         st.markdown(I.VALIDITY)
         st.markdown(I.LABEL_AUDIT)
-        st.warning(I.PILOT_STATUS)
+        verified, text = I.pilot_status(_pilot(str(root)))
+        (st.success if verified else st.warning)(text)
     with st.expander("Proposed next checks — not performed by this dashboard"):
         for index, check in enumerate(I.NEXT_CHECKS, 1):
             st.markdown(f"{index}. {check}")
@@ -322,6 +344,11 @@ def main() -> None:
     root = artifacts.parent
     st.set_page_config(page_title="preanchor", layout="wide")
     runs = _runs(str(artifacts))
+    try:
+        evidence(str(root), runs)
+    except (FileNotFoundError, ValueError) as exc:
+        st.error(f"Refusing to show these artifacts: {exc}")
+        st.stop()
     page = st.sidebar.radio(
         "Page", ("Overview", "Trajectory inspector", "Metrics", "Layers", "Lead time and controls")
     )

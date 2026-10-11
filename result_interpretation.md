@@ -279,6 +279,8 @@ The label audit also failed its planned agreement threshold: released and canoni
 
 The planned fresh Problem 4682 counterfactual-generation pilot could not be located, so the MVP should be described as missing that intended validation component unless the artifact is subsequently recovered.
 
+**Correction (2026-10-11).** The pilot artifacts have since been located and verified. Stage 5 production run `20260915T144926Z-bb9ba695de-9fca4c21` finished 256 of 256 completions, all checksum-valid, with no failed requests. It wrote `fresh_labels.parquet` with labels for 5 sentences (sidecar-verified; see `docs/stage5_measurements.md`). The component is therefore present, not missing. This corrects only its availability; it does not change any conclusion above, and the dashboard now reports the pilot's status from these files.
+
 One numerical discrepancy was investigated and resolved as benign: the residualized model's raw-score and probability columns give AUCPR 0.1267 vs 0.1333. The columns are monotonically identical except that sigmoid saturation maps the two top-ranked positives to exactly probability 1.0; scikit-learn's tie-grouped AP computation then scores the tied pair more favorably by exactly (1/25)·(2/3 − 1/2) = 0.00667, the entire gap. The tie-free value 0.1267 is the correct one.
 
 ---

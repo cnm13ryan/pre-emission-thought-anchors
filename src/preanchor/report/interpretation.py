@@ -139,8 +139,37 @@ LABEL_AUDIT = (
     "fallback does not establish that the importance label is reliable."
 )
 PILOT_STATUS = (
-    "The author of result_interpretation.md could not locate the planned fresh "
-    "Problem 4682 resampling pilot. This dashboard does not verify that pilot's "
-    "completion; treat this validation component as unverified until its artifacts "
-    "are recovered and checked. Not locating it is not proof it was never run."
+    "No Stage 5 production summary with fresh labels was found in this root, so the "
+    "planned fresh Problem 4682 resampling pilot cannot be verified here. Treat this "
+    "validation component as unverified until its artifacts are restored and checked. "
+    "Not finding it is not proof it was never run."
 )
+
+
+def pilot_status(pilot: dict | None) -> tuple[bool, str]:
+    """(verified, text) for the fresh resampling pilot, from sidecar-verified Stage 5 files.
+
+    ``pilot`` is ``loaders.load_stage5_pilot`` output with its run id under ``run_id``, or
+    None when no Stage 5 production artifacts exist in the root.
+    """
+    if not pilot:
+        return False, PILOT_STATUS
+    s = pilot["summary"]
+    complete = (s.get("namespace") == "production" and s.get("completed_total", 0) > 0
+                and s.get("completed") == s.get("completed_total") == s.get("valid_checksums")
+                and not s.get("request_failures") and pilot["fresh_label_rows"] > 0)
+    if not complete:
+        return False, (
+            f"Stage 5 run {pilot['run_id']} exists but is incomplete: "
+            f"{s.get('completed')} of {s.get('completed_total')} completions, "
+            f"{s.get('valid_checksums')} checksum-valid, {s.get('request_failures')} failed "
+            "requests. Treat the fresh resampling pilot as unverified.")
+    return True, (
+        f"The fresh resampling pilot is present and complete in this root: Stage 5 run "
+        f"{pilot['run_id']} finished {s['completed']} of {s['completed_total']} "
+        f"completions, all checksum-valid, and wrote fresh labels for "
+        f"{pilot['fresh_label_rows']} sentences (sidecar-verified). Project records "
+        "(docs/stage5_measurements.md) identify it as the Problem 4682 pilot. "
+        "result_interpretation.md said it could not be located; these restored artifacts "
+        "supersede that statement. This check verifies the files' integrity, not the "
+        "pilot's scientific conclusions.")
