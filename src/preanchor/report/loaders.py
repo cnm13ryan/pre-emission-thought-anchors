@@ -101,7 +101,7 @@ def check_lineage(sources: Sources, s9: dict, *, stage8_run_id: str, stage9_run_
     Stage 8 files it froze from. Stage 9's metrics and test receipt carry the freeze hash,
     which is the hash of Stage 9's frozen_selection.json. Stage 10's manifest records the
     Stage 9 run and freeze hash it consumed. Call after the Stage 8 and 9 files are loaded
-    through ``sources``.
+    through ``sources``. Stage 10's tables must also match the manifest's output hashes.
     """
     problems = []
     seen = sources.hashes
@@ -146,6 +146,11 @@ def check_lineage(sources: Sources, s9: dict, *, stage8_run_id: str, stage9_run_
                         f"not {stage8_run_id!r}")
     if consumed.get("stage9/freeze_sha256") != freeze:
         problems.append("Stage 10 consumed a different Stage 9 freeze")
+    produced = manifest.get("output_hashes", {})
+    for name in STAGE10_FILES.values():  # tables the report reads must be this run's outputs
+        actual = seen.get(sources.run_relative(stage10_run_id, name))
+        if actual is None or produced.get(name) != actual:
+            problems.append(f"Stage 10 {name} does not match the manifest's output hash")
     if problems:
         raise ValueError("Stage 8-10 runs are not one lineage: " + "; ".join(problems))
 

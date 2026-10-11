@@ -103,10 +103,24 @@ def agreement(x: pd.DataFrame, y: pd.DataFrame, q90: dict, seed_material: str) -
     return out
 
 
+def common_counts(ok: pd.DataFrame, forks: pd.DataFrame | None = None) -> pd.Series:
+    """OK samples per fork usable by both replicates: min over replicates 1 and 2.
+
+    A replicate with no OK samples for a fork counts as 0, not as missing, so such a fork
+    gets common_n 0 instead of the other replicate's count. Forks listed in ``forks``
+    (trajectory_id, fork_idx) with no OK rows at all are included with 0 as well.
+    """
+    n = (ok.groupby(["trajectory_id", "fork_idx", "replicate"]).size().unstack()
+         .reindex(columns=[1, 2]).fillna(0).astype(int))
+    if forks is not None:
+        n = n.reindex(pd.MultiIndex.from_frame(forks[["trajectory_id", "fork_idx"]]
+                                               .drop_duplicates()), fill_value=0)
+    return n.min(axis=1).rename("common_n")
+
+
 def prepare_replicates(idx: pd.DataFrame, inputs: pd.DataFrame, gt: dict, model) -> tuple:
     ok = idx[idx.status == "OK"].copy()
-    n = ok.groupby(["trajectory_id", "fork_idx", "replicate"]).size().unstack()
-    common = n.min(axis=1).rename("common_n")
+    common = common_counts(ok, inputs)
     ok = ok.merge(common, left_on=["trajectory_id", "fork_idx"], right_index=True)
     ok = ok[ok.sample_idx < ok.common_n].copy()
     parsed = [A.parse_v2(t, finish_reason=f, token_count=c) for t, f, c in
@@ -174,6 +188,7 @@ def main() -> None:
         "index_status": {f"{a}:{b}": int(v) for (a, b), v in
                          idx.groupby(["replicate", "status"]).size().items()},
         "common_n_min": int(common.min()), "common_n_median": float(common.median()),
+        "zero_common_forks": [f"{t}:{f}" for (t, f), v in common.items() if v == 0],
         "v2_status_counts": {f"{a}:{b}": int(v) for (a, b), v in
                              ok.groupby(["replicate", "v2_status"]).size().items()},
         "similarity_missing": int(ok.similarity.isna().sum()),

@@ -201,6 +201,9 @@ def render_report(
     prediction_inputs = {k: v for k, v in inputs.items() if "predictions/" in k}
 
     out = Path(out)
+    if out.exists() and any(out.iterdir()):
+        # Stage 11 outputs are write-once: never unlink or overwrite a persisted report.
+        raise FileExistsError(f"Refusing to render into a non-empty directory: {out}")
     (out / "figures").mkdir(parents=True, exist_ok=True)
     (out / "reports").mkdir(parents=True, exist_ok=True)
     figure_hashes: dict[str, str | None] = {}

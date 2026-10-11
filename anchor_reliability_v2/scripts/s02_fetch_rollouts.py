@@ -1,6 +1,11 @@
 """Reacquire all 6,474 released fork files (pinned revision, hash-verified) and keep a rich
 per-rollout table. Raw JSON is never written to disk; one Parquet per fork; resumable.
 
+Resume is receipt-checked: each fork Parquet gets a ``.receipt.json`` naming the source
+record's sha256, the pinned revision, the receipt version, and the Parquet's own sha256,
+row count and columns. A fork is skipped only when its receipt validates. Anything else,
+including forks written before receipts existed, is quarantined and reacquired.
+
 Per rollout: stored upstream answer/correctness, v1 and v2 parses, every balanced box,
 token count (pinned tokenizer), ``</think>`` presence, looping diagnostics, the first
 replacement sentence (``chunk_resampled``) and a 600-char tail for non-answers.
@@ -29,6 +34,11 @@ from arv2.paths import DERIVED, INPUTS  # noqa: E402
 
 REVISION = "a3a2fe1eb6d52e6ef81860baff018a8df2eb8ae2"
 URL = "https://huggingface.co/datasets/uzaymacar/math-rollouts/resolve/{rev}/{path}"
+RECEIPT_VERSION = 1
+COLUMNS = ("trajectory_id", "problem_id", "trace_kind", "fork_idx", "sample_idx", "has_error",
+           "answer_stored", "is_correct_stored", "category_v1", "v2_status", "v2_answer",
+           "boxes", "box_unterminated", "rollout_chars", "rollout_tokens", "has_think_close",
+           "dup_sentence_frac", "max_repeat_run", "chunk_removed", "chunk_resampled", "tail")
 TOKENIZER = Path(os.environ.get("ARV2_TOKENIZER", Path.home() / "preanchor-root/cache/hf/hub/"
                  "models--deepseek-ai--DeepSeek-R1-Distill-Qwen-14B/snapshots/"
                  "1df8507178afcc1bef68cd8c393f61a886323761/tokenizer.json"))
@@ -62,11 +72,43 @@ def loop_metrics(text: str) -> tuple[float, int]:
     return float(dup), int(best)
 
 
+def receipt_path(target: Path) -> Path:
+    return target.with_name(target.stem + ".receipt.json")
+
+
+def receipt_ok(target: Path, rec: dict) -> bool:
+    """True only if the fork Parquet matches a receipt tied to this source record."""
+    rp = receipt_path(target)
+    if not (target.is_file() and rp.is_file()):
+        return False
+    try:
+        r = json.loads(rp.read_text())
+        meta = pq.read_metadata(target)
+        names = tuple(pq.read_schema(target).names)
+    except (OSError, ValueError, pa.ArrowException):
+        return False
+    return (r.get("version") == RECEIPT_VERSION and r.get("revision") == REVISION
+            and r.get("source_sha256") == rec["sha256"] and r.get("source_path") == rec["path"]
+            and r.get("parquet_sha256") == hashlib.sha256(target.read_bytes()).hexdigest()
+            and r.get("rows") == meta.num_rows and tuple(r.get("columns", ())) == names
+            and names == COLUMNS)
+
+
+def quarantine(target: Path) -> None:
+    """Move an unverifiable fork (and any receipt) aside; nothing is deleted."""
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    for path in (target, receipt_path(target)):
+        if path.exists():
+            os.replace(path, path.with_name(f"{path.name}.quarantined-{stamp}"))
+
+
 def process(rec: dict, out: Path, tok: Tokenizer, session: requests.Session) -> str:
     fork = int(Path(rec["path"]).parent.name.removeprefix("chunk_"))
     target = out / f"{rec['problem_id']}_{rec['trace_kind']}" / f"fork_{fork:04d}.parquet"
-    if target.exists():
+    if receipt_ok(target, rec):
         return "skipped"
+    if target.exists() or receipt_path(target).exists():
+        quarantine(target)  # unverifiable on resume: reacquire from the pinned source
     for attempt in range(7):
         try:
             r = session.get(URL.format(rev=REVISION, path=rec["path"]), timeout=180)
@@ -85,11 +127,7 @@ def process(rec: dict, out: Path, tok: Tokenizer, session: requests.Session) -> 
         samples = samples.get("solutions", samples.get("samples"))
     rollouts = [s.get("rollout") if isinstance(s.get("rollout"), str) else "" for s in samples]
     counts = [len(e.ids) for e in tok.encode_batch(rollouts, add_special_tokens=False)]
-    cols: dict[str, list] = {k: [] for k in (
-        "trajectory_id", "problem_id", "trace_kind", "fork_idx", "sample_idx", "has_error",
-        "answer_stored", "is_correct_stored", "category_v1", "v2_status", "v2_answer",
-        "boxes", "box_unterminated", "rollout_chars", "rollout_tokens", "has_think_close",
-        "dup_sentence_frac", "max_repeat_run", "chunk_removed", "chunk_resampled", "tail")}
+    cols: dict[str, list] = {k: [] for k in COLUMNS}
     for i, (s, text, n) in enumerate(zip(samples, rollouts, counts, strict=True)):
         parsed = parse_v2(text, token_count=n)
         boxes, unterminated = balanced_boxes(text)
@@ -116,6 +154,13 @@ def process(rec: dict, out: Path, tok: Tokenizer, session: requests.Session) -> 
     tmp = target.with_suffix(".tmp")
     pq.write_table(pa.table(cols), tmp)
     os.replace(tmp, target)
+    receipt = {"version": RECEIPT_VERSION, "revision": REVISION, "source_path": rec["path"],
+               "source_sha256": rec["sha256"],
+               "parquet_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+               "rows": len(samples), "columns": list(COLUMNS)}
+    rtmp = receipt_path(target).with_suffix(".tmp")
+    rtmp.write_text(json.dumps(receipt, sort_keys=True))
+    os.replace(rtmp, receipt_path(target))
     return "created"
 
 
