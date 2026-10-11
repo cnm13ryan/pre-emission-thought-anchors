@@ -52,8 +52,14 @@ which writes `results/s14_representation_rootcause.json` and `results/s14_oof_pr
 | signed_dacc | 0.51 | 0.52 |
 | **tv_debiased (the effect itself)** | **0.39** | **0.40** |
 
-With 100 vs 100 resamples, **0 of 6,434** MVP sentences show a significant change in the
-answer distribution (permutation test, BH 10%). Phase 2, with 300 vs 300, finds 7 of 190.
+**Correction (resolution artefact).** An earlier version of this document said 0 of 6,434
+MVP sentences were significant. That count is uninformative. The s14 permutation test
+used 500 permutations, so the smallest attainable p-value is 1/501 ≈ 0.002. BH at 10%
+over 6,434 tests needs p ≤ 1.6 × 10⁻⁵ for the top-ranked sentence, so no sentence could
+pass whatever its true effect (found in s17, `docs/targeted_sampling_design.md`).
+Counting significant MVP effects needs an exact test or at least 20,000 permutations.
+Phase 2, with 300 vs 300 resamples and 2,000 permutations over 190 tests, finds 7 of
+190. The split-half ceiling of 0.39 for `tv_debiased` does not depend on the test.
 
 ### 2. Predictability: best layer per representation
 
@@ -122,8 +128,9 @@ Within-trajectory Spearman, best layer:
      is therefore an uncertainty probe, not an anchor probe.
 
 2. **The anchor effect itself is barely measurable at 100 resamples.**
-   - The effect component has a reliability ceiling of 0.39, and no MVP sentence passes a
-     significance test.
+   - The effect component has a reliability ceiling of 0.39. The per-sentence significance
+     count on MVP data is not informative: it is limited by permutation resolution, see the
+     correction in §1.
    - No representation can be validated against a label that is mostly noise. Every
      representation reaches at most 0.08 on `tv_debiased`, which is 20% of an
      already-low ceiling.
