@@ -22,17 +22,20 @@ L_SENT = 40                      # tokens per sampled sentence (stop at sentence
 
 def arms(a) -> dict:
     pre_conv_forks = a.forks_screened
-    nested_forks = a.N * a.F
+    nested_forks = a.N * a.F          # all selected forks (anchor detection, A4)
     anchors = round(nested_forks * a.anchor_rate)
     out = {
         "B0_problem_screen": {"requests": a.candidates * a.base_samples,
                               "tokens": a.candidates * a.base_samples * L_FULL},
         "B1_fork_screen": {"requests": a.N * pre_conv_forks * a.screen_n,
                            "tokens": a.N * pre_conv_forks * a.screen_n * L_FULL},
-        "A1_nested_sentences": {"requests": nested_forks * a.K,
-                                "tokens": nested_forks * a.K * L_SENT},
-        "A1_nested_continuations": {"requests": nested_forks * (a.K + 1) * a.M,
-                                    "tokens": nested_forks * (a.K + 1) * a.M * L_FULL},
+        "A1_nested_sentences": {"requests": a.nested_problems * a.F * a.K,
+                                "tokens": a.nested_problems * a.F * a.K * L_SENT},
+        "A1_nested_continuations": {"requests": a.nested_problems * a.F * (a.K + 1) * a.M,
+                                    "tokens": a.nested_problems * a.F * (a.K + 1) * a.M
+                                    * L_FULL},
+        "A1b_label_arm": {"requests": (a.N - a.nested_problems) * a.F * a.label_n,
+                          "tokens": (a.N - a.nested_problems) * a.F * a.label_n * L_FULL},
         "A2_token_level": {"requests": anchors * a.a2_positions * a.a2_n,
                            "tokens": anchors * a.a2_positions * a.a2_n * L_FULL},
         "A3_sensitivity": {"requests": anchors * (1 + a.a3_controls) * a.a3_conditions * a.a3_n,
@@ -42,6 +45,8 @@ def arms(a) -> dict:
                             "tokens": nested_forks * a.a4_n * (a.a4_budget + 30)},
         "A5_released_settings": {"requests": a.a5_forks * a.a5_n,
                                  "tokens": a.a5_forks * a.a5_n * L_FULL},
+        "C_calibration_a100_vs_h100": {"requests": a.cal_forks * a.cal_n,
+                                       "tokens": a.cal_forks * a.cal_n * L_FULL},
         "A6_second_source": {"requests": a.a6_problems * (pre_conv_forks * a.screen_n
                                                           + a.a6_forks * (a.a6_K + 1) * a.a6_M),
                              "tokens": a.a6_problems * (pre_conv_forks * a.screen_n
@@ -62,8 +67,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--N", type=int, default=50)            # T7
     ap.add_argument("--F", type=int, default=20)            # forks per trajectory (T7)
-    ap.add_argument("--K", type=int, default=10)            # PENDING T6
-    ap.add_argument("--M", type=int, default=20)            # PENDING T6
+    ap.add_argument("--K", type=int, default=8)             # T6: K=8 (K=4 enough on r0 components)
+    ap.add_argument("--M", type=int, default=200)           # T6
+    ap.add_argument("--nested-problems", type=int, default=20)   # T6 design: 20 x 20 positions
+    ap.add_argument("--label-n", type=int, default=40)      # remaining problems: level/change labels
+    ap.add_argument("--cal-forks", type=int, default=0)     # >0 only on non-H100 hardware
+    ap.add_argument("--cal-n", type=int, default=100)
     ap.add_argument("--candidates", type=int, default=120)
     ap.add_argument("--base-samples", type=int, default=8)
     ap.add_argument("--forks-screened", type=int, default=110)   # pre-convergence forks / trace
