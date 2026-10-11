@@ -224,7 +224,40 @@ the preregistration (0.2).
 - Putnam-AXIOM: only 37 variants change the answer.
 - A second model: a frozen-item change. It can be proposed after Run 2.
 
-## 5. Cost of Run 2 (8 × A100; rate unverified)
+## 5. Cost of Run 2
+
+**Rate update, 2026-10-11, verified on lambda.ai/pricing and lambda.ai/instances.** The $14.32/h
+figure in the tables below came from a stale third-party listing. Lambda's current on-demand
+prices are:
+
+| Instance | Per GPU-hour | Per hour |
+|---|---|---|
+| **8 × A100 SXM 80 GB** | **$2.79** | **$22.32** |
+| 8 × H100 SXM 80 GB | $3.99 | $31.92 |
+| 8 × A100 SXM 40 GB | $1.99 | $15.92 (not viable: KV-cache headroom) |
+| 1 × H100 PCIe (the Phase 2 class) | $3.29 | $3.29 (was $2.49) |
+| Persistent filesystem | $0.20/GB-month, no ingress or egress charges | |
+
+To convert the $14.32 column below to the current A100 rate, multiply by 1.559.
+
+| Option | 8 × A100 @ $22.32/h, low / mid / high |
+|---|---|
+| K = 4, M = 200 | $3,290 / $2,081 / $1,532 |
+| K = 4, M = 150 | $2,743 / $1,739 / $1,283 |
+| K = 8, M = 200 | $5,040 / $3,175 / $2,328 |
+
+Run 1 on 8 × A100: $100–164.
+
+**8 × H100 SXM is now likely as cheap or cheaper, and faster.**
+- Decoding is bandwidth-bound, and H100 SXM has about 1.7× A100 bandwidth (3.35 vs
+  2.0 TB/s). At that assumed 1.68× throughput, K = 4, M = 200 costs **$2,847 / $1,816 /
+  $1,346** (low / mid / high) over **89 / 57 / 42 h**.
+- It also keeps the H100 family that Phase 2 used. Arm C still runs, because SXM is not PCIe.
+- The 1.68× is an assumption; the Run 1 dry run measures it.
+- **Recommended hardware: 8 × H100 SXM**, subject to the owner's approval of the GPU-class
+  change.
+
+*(The tables below keep the original $14.32 / $10.32 columns for traceability.)*
 
 **Assumptions:**
 - Tokens per continuation: 6,000 for new problems (about half of an ≤12k trace), 4,242 for
