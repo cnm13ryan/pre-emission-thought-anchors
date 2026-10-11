@@ -700,3 +700,18 @@ Stage 3/4 (working tree after `060f6c0`):
 - **fact:** Split-half κ for the q90 anchor flag is 0.195 (α = 1e-9), 0.445 (α = ½) and 0.417 (fork TV). These are lower bounds at N ≈ 50 per half.
 - **choice:** Candidate rules were fixed in `research/redesign/phase1_analysis_plan.md` before the data were read. No test-split metric was computed. Rejected: scoring new labels or baselines on test.
 - **interpretation:** These findings support the review's diagnosis that the current anchor flag is dominated by rare unseen answers, mostly real answers. No label is adopted; any adoption needs an amendment and owner approval. Report: `research/redesign/phase1_report.md`.
+## 2026-10-11: Codex review fixes on PR #5
+
+- **fact:** In `anchor_reliability_v2/scripts/s11_evaluate.py`, "strongest + activation" searched only three fixed baseline families, so it was not nested in the strongest-baseline comparison.
+- **choice:** Each outer fold now adds activations to the baseline family that fold's strongest-baseline search selected; inner CV chooses only the layer and penalty. Rejected: widening the augmented search to all families. That was tried first, and fold 4 of the flag target then paired activations with `observables` while its strongest baseline was `next_top20`, so the comparison was still not nested.
+- **fact:** Corrected comparisons:
+
+  | Target | Before | After |
+  |---|---|---|
+  | flag AP | +0.048 [+0.001, +0.093] | +0.036 [−0.002, +0.085] |
+  | `fork_tv` | +0.073 | +0.045 [−0.043, +0.107] |
+  | KL anchor | +0.057 | +0.014 [−0.009, +0.041] |
+
+  No other model changed, and no interval now excludes zero. Exploratory analysis; no frozen MVP item is involved.
+- **choice:** `render_report` and the Streamlit dashboard now refuse Stage 8, 9 and 10 runs that are not one lineage. The checks are: Stage 9 `probe_run_id` and its recorded Stage 8 file hashes; the freeze hash in Stage 9's metrics and test receipt, which must equal the hash of `frozen_selection.json`; and Stage 10's manifest record of the Stage 9 run, Stage 8 run and freeze hash. The real Stage 8, 9 and 10 runs pass. Regression tests were added in `tests/integration/test_report_rebuild.py`.
+- **fact / correction:** The fresh Stage 5 pilot exists and is complete: run `20260915T144926Z-bb9ba695de-9fca4c21`, 256 of 256 checksum-valid completions, with `fresh_labels.parquet` holding 5 sentences. The dashboard now derives the pilot's status from these sidecar-verified files instead of fixed text, and `result_interpretation.md` carries a dated correction. No conclusion changes.

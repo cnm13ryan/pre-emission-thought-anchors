@@ -33,7 +33,7 @@ generalisation (that is Phase 3). Source: `results/s11_evaluation.json`, produce
 | strongest baseline (inner-CV choice) | 0.152 [0.069, 0.295] | 0.120 [0.081, 0.187] | 0.100 [0.044, 0.180] |
 | activation | 0.229 [0.154, 0.303] | 0.151 [0.081, 0.241] | 0.171 [0.046, 0.315] |
 | observables + activation | 0.231 [0.164, 0.316] | 0.173 [0.093, 0.280] | 0.125 [0.046, 0.240] |
-| strongest + activation | 0.225 [0.157, 0.308] | 0.169 [0.092, 0.272] | 0.156 [0.046, 0.299] |
+| strongest + activation (fold's selected baseline + activation) | 0.196 [0.134, 0.282] | 0.157 [0.087, 0.262] | 0.114 [0.051, 0.206] |
 
 The strongest baseline was position in all 5 outer folds for the continuous score, and
 mixed (observables / position / next_top20) for the flag.
@@ -45,9 +45,20 @@ mixed (observables / position / next_top20) for the flag.
 | activation − position | +0.077 [−0.069, +0.182] | +0.027 [−0.011, +0.057] | +0.074 [−0.044, +0.162] |
 | activation − strongest | +0.077 [−0.069, +0.182] | +0.031 [−0.009, +0.062] | +0.072 [−0.012, +0.146] |
 | (obs + act) − obs | +0.090 [−0.003, +0.166] | +0.039 [−0.012, +0.082] | +0.020 [−0.021, +0.068] |
-| (strongest + act) − strongest | +0.073 [−0.036, +0.162] | **+0.048 [+0.001, +0.093]** | +0.057 [−0.010, +0.125] |
+| (strongest + act) − strongest | +0.045 [−0.043, +0.107] | +0.036 [−0.002, +0.085] | +0.014 [−0.009, +0.041] |
 
-- One interval of 12 excludes zero, and only just (lower bound +0.001).
+- No interval of the 12 excludes zero.
+- **Correction (2026-10-11, Codex review on PR #5).** The earlier "strongest + activation"
+  model searched only three fixed baseline families, so it was not nested in the
+  strongest-baseline comparison. In fold 4 of the flag target, for example, the strongest
+  baseline was `next_top20`, but the augmented model could not use it. Each fold now
+  augments exactly the baseline family that fold selected, and inner CV chooses only the
+  layer and penalty.
+  - The corrected flag comparison is +0.036 [−0.002, +0.085], down from +0.048
+    [+0.001, +0.093]. This was the one interval that previously excluded zero.
+  - The other two corrected comparisons also shrink: +0.045 for `fork_tv` and +0.014 for
+    the KL anchor.
+  - No other model or comparison changed.
 - The 12 comparisons are not corrected for multiplicity, and the data are exploratory.
   **This is not evidence of incremental information.**
 - The point estimates are consistently positive. That direction is what Phase 3 tests

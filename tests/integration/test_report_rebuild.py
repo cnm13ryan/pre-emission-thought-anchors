@@ -41,14 +41,14 @@ def _predictions(seed: int, split: str) -> pa.Table:
     return pa.Table.from_pylist(rows)
 
 
-def _metrics(split: str) -> dict:
+def _metrics(split: str, freeze: str) -> dict:
     model = {"average_precision": 0.1, "auroc": 0.6, "brier": 0.07, "ece": 0.08,
              "log_loss": 0.33, "n": 60, "n_positive": 6, "prevalence": 0.1,
              "calibrated": True, "n_trajectories": 8, "n_trajectories_with_positive": 4,
              "ndcg_top10_percent": 0.2, "precision_top10_percent": 0.2, "per_trajectory": {},
              "reliability": []}
     return {"schema_version": 1, "split": split, "run_id": S9, "stage": "stage9",
-            "freeze_sha256": "f" * 64,
+            "freeze_sha256": freeze,
             "models": {f"{f}:binary": dict(model) for f in FAMILIES},
             "primary": {"metric": "average_precision", "model": f"{PRIMARY}:binary",
                         "value": 0.1},
@@ -77,23 +77,29 @@ def root(tmp_path) -> Path:
            "spearman": None, "rmse": None, "converged": True}
           for f in (PRIMARY, "activation_only") for layer in (0, 22, 44)
           for fold in range(2)]
-    write_parquet(s8 / "probe_models/cv_results.parquet", pa.Table.from_pylist(cv))
-    write_json(s8 / "probe_models/frozen_selection.pending.json",
-               {"binary": {"layer": 44, "C": 0.1, "probe_name": PRIMARY},
-                "anchor_threshold": 1.35})
+    cv_sha = write_parquet(s8 / "probe_models/cv_results.parquet", pa.Table.from_pylist(cv))
+    pending_sha = write_json(s8 / "probe_models/frozen_selection.pending.json",
+                             {"binary": {"layer": 44, "C": 0.1, "probe_name": PRIMARY},
+                              "anchor_threshold": 1.35})
     s9 = root / "artifacts/runs" / S9
+    # Lineage the report checks: Stage 9 records the Stage 8 run and file hashes it froze
+    # from, and the freeze hash is the hash of frozen_selection.json.
+    freeze = write_json(s9 / "frozen_selection.json",
+                        {"binary": {"layer": 44, "C": 0.1, "probe_name": PRIMARY},
+                         "anchor_threshold": 1.35, "probe_run_id": S8,
+                         "cv_results_sha256": cv_sha, "pending_selection_sha256": pending_sha})
     for split in ("validation", "test"):
         write_parquet(s9 / f"predictions/{split}.parquet",
                       _predictions(len(split), split))
-        write_json(s9 / f"metrics/{split}.json", _metrics(split))
-    write_json(s9 / "metrics/test_receipt.json", {"run_id": S9, "freeze_sha256": "f" * 64})
+        write_json(s9 / f"metrics/{split}.json", _metrics(split, freeze))
+    write_json(s9 / "metrics/test_receipt.json", {"run_id": S9, "freeze_sha256": freeze})
     write_json(s9 / "probe_models/calibrator.json",
                {"method": "platt", "fitted_on": "validation",
                 "parameters": {"A": -0.1, "B": 1.9}})
-    write_json(s9 / "frozen_selection.json",
-               {"binary": {"layer": 44, "C": 0.1, "probe_name": PRIMARY},
-                "anchor_threshold": 1.35})
     s10 = root / "artifacts/runs" / S10
+    write_json(s10 / "manifest.json",
+               {"run_id": S10, "input_hashes": {"stage9_run_id": S9, "probe_run_id": S8,
+                                                "stage9/freeze_sha256": freeze}})
     leads = [{"schema_version": 1, "sentence_id": f"{i}:test", "problem_id": 1,
               "trajectory_id": "t1", "split": "test", "lead_sentences": lead,
               "threshold_quantile": 0.9, "layer": 44, "probe_name": PRIMARY,
@@ -270,3 +276,65 @@ def test_controls_restyle_without_changing_values():
     for trace in groups.data:
         colors.setdefault(trace.name, set()).add(trace.marker.color)
     assert all(len(values) == 1 for values in colors.values())
+
+
+def _replace_json(path: Path, value: dict) -> None:
+    """Artifacts are write-once; tests that tamper must remove the file and its sidecar."""
+    for stale in (path, Path(str(path) + ".sha256")):
+        stale.unlink(missing_ok=True)
+    write_json(path, value)
+
+
+def test_mismatched_stage_runs_are_refused(root, tmp_path):
+    # Codex review on PR #5: each run is sidecar-valid on its own, but runs from different
+    # lineages must not be rendered as one report.
+    other8 = "20990101T000000Z-other-stage08"
+    src8, dst8 = root / "artifacts/runs" / S8, root / "artifacts/runs" / other8
+    for path in src8.rglob("*"):
+        if path.is_file() and path.suffix in (".parquet", ".json") \
+                and not path.name.endswith(".schema.json"):
+            target = dst8 / path.relative_to(src8)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if path.suffix == ".parquet":
+                write_parquet(target, pa.Table.from_pylist([{"x": 1}]))
+            else:
+                write_json(target, {"other": True})
+    with pytest.raises(ValueError, match="not one lineage"):
+        render_report(root, tmp_path / "a", stage9_run_id=S9, stage10_run_id=S10,
+                      stage8_run_id=other8)
+    # A Stage 10 run that consumed a different Stage 9 freeze is refused too.
+    _replace_json(root / "artifacts/runs" / S10 / "manifest.json",
+                  {"run_id": S10, "input_hashes": {"stage9_run_id": S9, "probe_run_id": S8,
+                                                   "stage9/freeze_sha256": "0" * 64}})
+    with pytest.raises(ValueError, match="different Stage 9 freeze"):
+        _render(root, tmp_path / "b")
+
+
+def test_freeze_hash_must_match_frozen_selection(root, tmp_path):
+    s9 = root / "artifacts/runs" / S9
+    _replace_json(s9 / "metrics/test_receipt.json", {"run_id": S9, "freeze_sha256": "e" * 64})
+    with pytest.raises(ValueError, match="test_receipt.json freeze hash"):
+        _render(root, tmp_path / "out")
+
+
+def test_pilot_status_reflects_stage5_artifacts(tmp_path):
+    from preanchor.report import interpretation as I
+    from preanchor.report.loaders import Sources, find_stage5_pilot, load_stage5_pilot
+
+    assert find_stage5_pilot(tmp_path) is None
+    assert I.pilot_status(None) == (False, I.PILOT_STATUS)
+    run = "20990101T000000Z-fake-stage05"
+    stage5 = tmp_path / "artifacts/runs" / run / "stages/stage5"
+    summary = {"run_id": run, "namespace": "production", "completed": 256,
+               "completed_total": 256, "valid_checksums": 256, "request_failures": 0}
+    write_json(stage5 / "summary.json", summary)
+    write_parquet(stage5 / "fresh_labels.parquet",
+                  pa.Table.from_pylist([{"sentence_idx": i} for i in range(5)]))
+    assert find_stage5_pilot(tmp_path) == run
+    pilot = {"run_id": run, **load_stage5_pilot(Sources(tmp_path), run)}
+    verified, text = I.pilot_status(pilot)
+    assert verified and "256 of 256" in text and "5 sentences" in text
+    _replace_json(stage5 / "summary.json",
+                  {**summary, "completed": 200, "valid_checksums": 200})
+    pilot = {"run_id": run, **load_stage5_pilot(Sources(tmp_path), run)}
+    assert I.pilot_status(pilot)[0] is False

@@ -491,10 +491,10 @@
       "h": 10000.0,
       "spec": {
        "blocks": [
-        "observables",
+        "position",
         "act"
        ],
-       "layer": 44
+       "layer": 24
       }
      },
      {
@@ -502,7 +502,7 @@
       "h": 10000.0,
       "spec": {
        "blocks": [
-        "observables",
+        "position",
         "act"
        ],
        "layer": 48
@@ -513,7 +513,7 @@
       "h": 10000.0,
       "spec": {
        "blocks": [
-        "observables",
+        "position",
         "act"
        ],
        "layer": 44
@@ -630,9 +630,9 @@
      "nonfinite_draws": 0
     },
     "strongest+activation": {
-     "hi": 0.3080605303285015,
-     "lo": 0.15719054474379354,
-     "metric": 0.2250684676393334,
+     "hi": 0.282497733996047,
+     "lo": 0.1336279008137021,
+     "metric": 0.196396570330156,
      "nonfinite_draws": 0
     },
     "strongest_baseline": {
@@ -662,9 +662,9 @@
      "nonfinite_draws": 0
     },
     "strongest+activation - strongest_baseline": {
-     "delta": 0.0732476536545553,
-     "hi": 0.1624068280891114,
-     "lo": -0.03567064379268223,
+     "delta": 0.04457575634537789,
+     "hi": 0.10647459588121175,
+     "lo": -0.042595573352904786,
      "nonfinite_draws": 0
     }
    },
@@ -1113,7 +1113,7 @@
       "h": 0.001,
       "spec": {
        "blocks": [
-        "observables",
+        "next_top20",
         "act"
        ],
        "layer": 32
@@ -1219,9 +1219,9 @@
      "nonfinite_draws": 0
     },
     "strongest+activation": {
-     "hi": 0.2717289161241744,
-     "lo": 0.09221631166885447,
-     "metric": 0.16877752102373464,
+     "hi": 0.2622570564965282,
+     "lo": 0.08673481688275826,
+     "metric": 0.15657158401186755,
      "nonfinite_draws": 0
     },
     "strongest_baseline": {
@@ -1251,9 +1251,9 @@
      "nonfinite_draws": 0
     },
     "strongest+activation - strongest_baseline": {
-     "delta": 0.048284628495471466,
-     "hi": 0.093032063384114,
-     "lo": 0.0008567596908406598,
+     "delta": 0.036078691483604375,
+     "hi": 0.08452777334785273,
+     "lo": -0.0022807474416580557,
      "nonfinite_draws": 0
     }
    },
@@ -1311,9 +1311,9 @@
      "nonfinite_draws": 0
     },
     "strongest+activation": {
-     "hi": 0.2992663916055502,
-     "lo": 0.04639028788597597,
-     "metric": 0.15620864986550376,
+     "hi": 0.2064790875028744,
+     "lo": 0.05087272726674176,
+     "metric": 0.1139631800562543,
      "nonfinite_draws": 0
     },
     "strongest_baseline": {
@@ -1343,9 +1343,9 @@
      "nonfinite_draws": 0
     },
     "strongest+activation - strongest_baseline": {
-     "delta": 0.05657785452316011,
-     "hi": 0.1250615696204923,
-     "lo": -0.009857228614965487,
+     "delta": 0.014332384713910656,
+     "hi": 0.040851477185375164,
+     "lo": -0.008632536689801436,
      "nonfinite_draws": 0
     }
    },
