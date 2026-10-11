@@ -93,8 +93,8 @@ The full plan is in `docs/v3_followup_gpu_plan.md` (v3). In outline:
 - We assemble and de-duplicate the problem pool, extend the answer checker, and build the
   run software.
 
-**Run 1: a short GPU session to screen and test.** About 5–7 hours on 8 A100 GPUs, roughly
-$50–105.
+**Run 1: a short GPU session to screen and test.** About 4.4–7.9 hours on 8 H100 SXM GPUs
+(35–63 GPU-hours), roughly $140–250 at Lambda's verified $31.92/h.
 - Sample each candidate problem 16 times, then 48 times, and keep those the model solves
   15–85% of the time.
 - Run red-flag contamination checks, and screen the puzzles.
@@ -102,8 +102,9 @@ $50–105.
 - Measure the real speed and trace lengths.
 - **Then report the yield and a revised cost to the owner, who decides on Run 2.**
 
-**Run 2: the main experiment.** About 3–4 days on 8 A100 GPUs, roughly $700–2,100,
-depending on speed and price. In priority order:
+**Run 2: the main experiment.** About 42–137 hours on 8 H100 SXM GPUs (336–1,099
+GPU-hours), most likely 42–57 hours, which is about $1,340–1,820 at $31.92/h. The upper
+end assumes the slow single-GPU rate measured in Phase 2. Run 1 measures the real speed. In priority order:
 1. **Nested sampling, the flagship.** On 20 hard, clean problems, sample several candidate
    sentences at each step, then 200 continuations from each. This measures how predictable
    the size of a sentence's effect is.
@@ -133,8 +134,9 @@ a contribution.
 **Now:**
 1. Approve the dataset change: new competition problems, stored as references only, for
    non-commercial research use.
-2. Confirm the hardware (8 × A100 80 GB) and the actual hourly price.
-3. Approve the Run 1 budget, about $50–105.
+2. Confirm the hardware: 8 × H100 SXM, recommended at $31.92/h (8 × A100 80 GB at $22.32/h
+   is the fallback).
+3. Approve the Run 1 budget, about $140–250.
 
 **After Run 1:**
 4. How deep the nested sampling goes (4 or 8 candidate sentences per step; 150 or 200

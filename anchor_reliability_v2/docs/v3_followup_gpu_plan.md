@@ -87,8 +87,8 @@ released dataset".
 
 ## 3. Run 1: screening, dry run and pilots (one short session on the node)
 
-- **Target hardware:** 8 × A100 80 GB SXM4. Run 1 could also run on a single GPU, more
-  slowly.
+- **Target hardware:** 8 × H100 SXM 80 GB (recommended; see the §5 rate update). The
+  fallback is 8 × A100 80 GB SXM4. Run 1 could also run on a single GPU, more slowly.
 - **Shared settings:**
   - the same pinned model revision and vLLM image as before;
   - T 0.6, top_p 0.95;
@@ -302,8 +302,10 @@ A1 at K = 4 and M ≥ 150, A1b, A5, A4 (if P1 passes), C and F are never cut.
 ## 6. Hardware, efficiency, integrity
 
 **Hardware:**
-- 8 × A100 80 GB SXM4, as 8 TP = 1 replicas. This is a GPU-class change, so it needs owner
-  approval.
+- 8 × H100 SXM 80 GB (recommended), with 8 × A100 80 GB SXM4 as the fallback, run as 8
+  TP = 1 replicas. Either is a GPU-class change, so it needs owner approval. The code
+  currently admits only H100 PCIe and A6000 hardware names (`src/preanchor/labels/a6000.py`),
+  so that list must be extended before launch.
 - A single H100 would take 11–40 days for Run 2.
 - The lease name stays `gpu:h100`, because `control/` is frozen; the mismatch is recorded.
 
@@ -339,9 +341,10 @@ A1 at K = 4 and M ≥ 150, A1b, A5, A4 (if P1 passes), C and F are never cut.
 
 1. **Approve the dataset amendment** (0.1): post-release competition problems, references
    only, under CC BY-NC-SA.
-2. **Hardware:** 8 × A100 80 GB SXM4 (a GPU-class change) and the **confirmed hourly
-   rate**.
-3. **Run 1 budget:** about $50–105.
+2. **Hardware:** 8 × H100 SXM 80 GB, recommended at the verified $31.92/h (8 × A100 80 GB
+   at $22.32/h is the fallback). Either is a GPU-class change.
+3. **Run 1 budget:** about 35–63 GPU-hours (4.4–7.9 node-hours), about $140–250 on
+   8 × H100 SXM.
 4. **For Run 2, after the Run 1 note:** K (4 or 8), M (200 or 150), whether to include A1m,
    and the budget cap.
 5. **A5 hosted-provider cell:** approve an external API account, or run prompt format only.
