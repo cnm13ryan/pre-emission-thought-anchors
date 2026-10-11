@@ -22,3 +22,6 @@ dist/
 
 # Claude Code review worktrees (tool state, never source)
 .claude/
+
+# Grant applications are kept local, never published
+anchor_reliability_v2/docs/proposal_bluedot_rapid_grant.md
