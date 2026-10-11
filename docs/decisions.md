@@ -686,3 +686,17 @@ Stage 3/4 (working tree after `060f6c0`):
   and on supported rows, vanishes at q95 and at lead one on test, and lies inside the
   stratified permutation null (84th percentile on test, 91st on validation). Nothing here
   reopens Stage 8/9 selection.
+## 2026-09-18: research-post evidence audit (parent commit `f11823f`)
+
+- **choice:** Reproduce headline AP and problem-bootstrap comparisons from saved predictions, and reproduce the existing transition models at their saved C values. Store provenance, predictions and figure inputs in `research/blog/`. Rejected: treating prior prose as authoritative or reopening frozen model selection.
+- **fact:** The test's 15 early anchors are at absolute sentence indices 0–25, not in each trajectory's first eligible-position quintile; that relative definition gives seven. The post and new position figure distinguish these definitions.
+- **choice:** Compare transition decoding with previous-sentence stage plus position (validation/test AP 0.7623/0.7924). Rejected: highlighting only the weaker position or registered-observables comparison. Independently seeded paired problem bootstraps are exploratory and recorded in `research/blog/evidence.json`.
+- **choice:** Compare anchor lead zero and lead one on identical target rows. Rejected: plotting the unfiltered lead-zero score against the smaller lead-one population.
+- **interpretation:** Anchor activation gains are not established beyond strong observables; smoothing sensitivity concerns the estimator, and missing-answer association is not a decomposition of KL. Transition decoding remains compatible with lexical preparation. No frozen scientific choice or locked evaluation was changed.
+## 2026-10-09: redesign Phase 1 (parent commit `f11823f`; exploratory, no frozen change)
+
+- **choice:** Reacquire the released raw forks (pinned revision, hash-checked against the Stage 4 raw run's source manifest) into a compact per-rollout table, and recompute labels on CPU/MPS. Rejected: reporting items 1–2 as blocked on saved aggregates alone. Owner authorised the download on 2026-10-09.
+- **fact:** The recomputation reproduces every eligible `importance_canonical`, `dissimilar_count` and α-sensitivity value exactly. At α = 1e-9, 330/344 anchors draw at least half of I from answers absent from the "with" group; 309 of those are real answers and 21 are `<NO_ANSWER>`. `<NO_ANSWER>` totals 11,181 samples: 9,739 length-truncated, 5 parse failures, 1,437 other (which mixes unboxed stated answers with early stops).
+- **fact:** Split-half κ for the q90 anchor flag is 0.195 (α = 1e-9), 0.445 (α = ½) and 0.417 (fork TV). These are lower bounds at N ≈ 50 per half.
+- **choice:** Candidate rules were fixed in `research/redesign/phase1_analysis_plan.md` before the data were read. No test-split metric was computed. Rejected: scoring new labels or baselines on test.
+- **interpretation:** These findings support the review's diagnosis that the current anchor flag is dominated by rare unseen answers, mostly real answers. No label is adopted; any adoption needs an amendment and owner approval. Report: `research/redesign/phase1_report.md`.
