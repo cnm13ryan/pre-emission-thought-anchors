@@ -25,3 +25,11 @@ dist/
 
 # Grant applications are kept local, never published
 anchor_reliability_v2/docs/proposal_bluedot_rapid_grant.md
+
+# OS and editor clutter
+.DS_Store
+*.un~
+*~
+
+# Large regenerable activation dumps (over the GitHub 100 MB limit)
+research/reasoning_stage/outputs/*.npy
