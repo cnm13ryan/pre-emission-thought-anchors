@@ -168,7 +168,7 @@ Items in `[BRACKETS]` must be filled in by the applicant; nothing personal has b
 > - Literature audit: no published reliability check exists. Plus an out-of-distribution
 >   problem-sourcing report and a costed, staged GPU plan.
 >
-> Links: `[REPO OR PUBLIC SUMMARY LINK]`
+> Code, results and write-ups: https://github.com/cnm13ryan/pre-emission-thought-anchors/tree/study/anchor-reliability-v2/anchor_reliability_v2
 
 *(about 115 words)*
 
@@ -222,7 +222,7 @@ Items in `[BRACKETS]` must be filled in by the applicant; nothing personal has b
 
 > **Why me:** I built and ran the whole pipeline: preregistration, a 40k-generation
 > replication with hash-verified provenance, diagnostics, and the negative pilots. I found
-> the reliability problem myself. `[BACKGROUND; BLUEDOT AFFILIATION, e.g. course and cohort]`
+> the reliability problem myself. I am a BlueDot alum and an active member of the BlueDot community. `[OPTIONAL: one line of relevant background]`
 >
 > **Why now:** Thought Anchors and Thought Branches (ICLR 2026) are being adopted for safety
 > analyses such as sycophancy and agentic misbehaviour, but no one has checked whether the
@@ -241,12 +241,11 @@ Items in `[BRACKETS]` must be filled in by the applicant; nothing personal has b
 
 - [x] **Amount matches the budget.** Q1 equals the Q4 total ($3,650): a multiple of $50,
       within $50–$10,000.
-- [ ] **Q3 has a link.** Q3 names concrete work; **a public link is still needed** (the repo
-      is private).
+- [x] **Q3 has a link.** Q3 names concrete work and links the public repository.
 - [x] **Q4 is in scope.** It is itemised, and every line is compute, API credits or storage.
 - [x] **Q5 is one plausible chain.** The load-bearing link is named.
 - [x] **Q6 is an honest counterfactual.** It shows that money is the bottleneck for the core
       experiment.
-- [ ] **Q7 is complete.** It still needs the applicant's background and BlueDot affiliation.
+- [x] **Q7 is complete.** It states the BlueDot alum and community affiliation; one optional background line remains.
 - [x] **Nothing is fabricated.** Every number comes from committed results; personal items
       are left as placeholders.
