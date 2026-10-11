@@ -62,3 +62,27 @@ def test_raw_surface_matches_parse_v2():
 ])
 def test_nested_and_large(a, b):
     assert C(a) == C(b) and not C(a).startswith("s:")
+
+
+@pytest.mark.parametrize("attack", [
+    "__import__('os').system('echo pwned')", "(1).__class__.__bases__", "open('x')",
+    "x.real", "eval('1')", "lambda: 1",
+])
+def test_untrusted_answers_never_reach_python_eval(attack):
+    # Codex review on PR #5: parse_expr evaluates Python; model output is untrusted.
+    assert C(attack).startswith("s:")
+
+
+@pytest.mark.parametrize("bomb", ["9**9**9**9", "9^{9^{9}}", "(9999^{9999})^{9999}",
+                                  "2^{10^{9}}", "100000!"])
+def test_resource_exhausting_answers_are_refused_quickly(bomb):
+    import time
+
+    t0 = time.time()
+    assert C(bomb).startswith("s:")
+    assert time.time() - t0 < 2
+
+
+def test_large_but_bounded_answers_still_evaluate():
+    assert C("(9/8)^{2007}").startswith("q#") and C("2014!").startswith("q#")
+    assert C("\\left(\\dfrac{307}{273}\\right)^{2007}").startswith("q#")

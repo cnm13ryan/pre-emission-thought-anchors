@@ -95,8 +95,8 @@ limit on prediction.
 
 - **Confirmed:** under strict grouping and training-only fitting, activations score above
   every lexical and next-token baseline in point estimate, on all three targets.
-- **Not established:** that this advantage holds beyond chance. The intervals include 0
-  in 11 of 12 comparisons.
+- **Not established:** that this advantage holds beyond chance. After the 2026-10-11
+  nested-comparator correction, the intervals include 0 in all 12 comparisons.
 - **Interpretation (tentative):** most of the predictable variance is shared with
   position and context. Earlier layers already carry part of it, and the earlier boundary
   works as well as the immediate one. That favours slowly varying trajectory state over
