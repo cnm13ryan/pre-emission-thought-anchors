@@ -126,20 +126,85 @@ def _latex_to_sympy(s: str) -> str:
     return out
 
 
+_SAFE_CHARS = re.compile(r"[0-9A-Za-z+\-*/().!, ]*")
+_ALLOWED_NAMES = {"sqrt", "pi"}
+
+
+def _safe_for_parse(expr: str) -> bool:
+    """Whitelist gate before SymPy's ``parse_expr``, which evaluates Python.
+
+    Answers are untrusted model output, so only plain arithmetic reaches the parser:
+    digits, operators, brackets, ``!``, commas and spaces; identifiers limited to
+    ``sqrt``, ``pi`` and single-letter variables (no ``__``, attribute names or calls to
+    anything else); and a bounded length. Size is bounded separately: ``_sympy_key``
+    parses without evaluating and refuses expressions whose ``_digit_bound`` is too large.
+    """
+    if len(expr) > 200 or not _SAFE_CHARS.fullmatch(expr) or "__" in expr:
+        return False
+    names = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", expr)
+    if any(n not in _ALLOWED_NAMES and len(n) > 1 for n in names):
+        return False
+    # SymPy evaluates n! while parsing (even with evaluate=False), so cap literal factorial
+    # arguments at 4 digits before parsing; other size limits are checked on the parse tree.
+    if re.search(r"\d{5,}\s*\)*\s*!", expr):
+        return False
+    return True
+
+
+_MAX_DIGITS = 100_000  # bound on evaluated size; (307/273)^2007 bounds to ~22k, evaluates in ms
+
+
+def _digit_bound(node) -> float:
+    """Rough upper bound on the decimal digits of an *unevaluated* SymPy expression.
+
+    Used before evaluation so power towers (9**9**9), huge factorials and similar inputs
+    are refused instead of hanging. Returns ``inf`` for anything it cannot bound.
+    """
+    import math
+
+    import sympy
+
+    if node.is_Rational:   # digits from bit length: str() of huge ints is capped and slow
+        return (abs(int(node.p)).bit_length() + int(node.q).bit_length()) * 0.30103 + 2
+    if node.is_Symbol or node.is_NumberSymbol or node.is_Float:
+        return 20
+    if isinstance(node, sympy.Pow):
+        if not node.exp.is_number:
+            return _digit_bound(node.base) + 50   # symbolic exponent: left unevaluated
+        if _digit_bound(node.exp) > _MAX_DIGITS:
+            return math.inf
+        magnitude = abs(complex(sympy.N(node.exp, 15)))   # mpmath: fast even for towers
+        if not math.isfinite(magnitude) or magnitude > 1e6:
+            return math.inf
+        return _digit_bound(node.base) * max(magnitude, 1.0) + 1
+    if isinstance(node, sympy.factorial):
+        n = node.args[0]
+        if n.is_Integer and 0 <= int(n) <= 9999:
+            return int(n) * math.log10(max(int(n), 2)) + 1
+        return math.inf
+    return sum(_digit_bound(a) for a in node.args) + 1
+
+
 @lru_cache(maxsize=100_000)
 def _sympy_key(s: str) -> str | None:
     if "\\" in s.replace("\\frac", "").replace("\\sqrt", "").replace("\\pi", "") \
             .replace("\\cdot", "").replace("\\times", ""):
         return None                                  # other LaTeX: not attempted
+    candidate = _latex_to_sympy(s)
+    if not _safe_for_parse(candidate):
+        return None                                  # not plain arithmetic: string rule
     try:
         import sympy
         from sympy.parsing.sympy_parser import (factorial_notation,
                                                 implicit_multiplication_application,
                                                 parse_expr, standard_transformations)
 
-        expr = parse_expr(_latex_to_sympy(s), evaluate=True,
-                          transformations=standard_transformations
-                          + (factorial_notation, implicit_multiplication_application))
+        transformations = standard_transformations + (factorial_notation,
+                                                      implicit_multiplication_application)
+        shape = parse_expr(candidate, evaluate=False, transformations=transformations)
+        if not isinstance(shape, sympy.Basic) or _digit_bound(shape) > _MAX_DIGITS:
+            return None                              # too large to evaluate safely
+        expr = parse_expr(candidate, evaluate=True, transformations=transformations)
         if not isinstance(expr, sympy.Basic):
             return None
         if not expr.free_symbols:

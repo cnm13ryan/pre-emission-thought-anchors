@@ -183,6 +183,10 @@ def evaluate(frame, target, kind, acts, groups, seed, specs_by_model, flag_q=Non
     chosen = {m: [] for m in specs_by_model}
     for k, (tr, te) in enumerate(outer):
         if flag_q is not None:
+            # Training-fold threshold by design (docs/evaluation_design.md §C): this CV pools
+            # all 20 MVP problems, so the fixed MVP-train q90 would be computed partly from
+            # this fold's test problems. The fixed threshold applies to Phase 2 reliability
+            # and Phase 3 held-out labels, not to this exploratory CV.
             thr = np.quantile(raw[tr], flag_q) if isinstance(flag_q, float) else flag_q(raw[tr])
             y = (raw >= thr).astype(int)
         else:
