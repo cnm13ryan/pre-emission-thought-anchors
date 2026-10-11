@@ -23,6 +23,7 @@ from preanchor.report.loaders import (
     Sources,
     check_lineage,
     find_stage5_pilot,
+    lineage_from_stage10,
     load_stage5_pilot,
     load_stage8,
     load_stage9,
@@ -94,6 +95,13 @@ def _runs(artifacts: str) -> dict[str, str]:
         if stages.is_dir():
             for stage in stages.iterdir():
                 out[stage.name] = run.name
+    # Stages 8-10 must be one lineage: follow the newest Stage 10 run's manifest back to the
+    # Stage 9 and Stage 8 runs it consumed, rather than taking each stage's newest run.
+    if "stage10" in out:
+        try:
+            out.update(lineage_from_stage10(Path(artifacts).parent, out["stage10"]))
+        except (FileNotFoundError, ValueError):
+            pass  # the lineage check in evidence() then reports the problem
     return out
 
 

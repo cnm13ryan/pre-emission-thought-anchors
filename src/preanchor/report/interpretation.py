@@ -155,19 +155,22 @@ def pilot_status(pilot: dict | None) -> tuple[bool, str]:
     if not pilot:
         return False, PILOT_STATUS
     s = pilot["summary"]
-    complete = (s.get("namespace") == "production" and s.get("completed_total", 0) > 0
-                and s.get("completed") == s.get("completed_total") == s.get("valid_checksums")
-                and not s.get("request_failures") and pilot["fresh_label_rows"] > 0)
+    planned = pilot.get("planned_jobs", 0)
+    # A resumed run's ``completed`` and ``request_failures`` cover only its final session;
+    # completion is judged on the durable, checksum-valid total against the plan.
+    total, valid = s.get("completed_total"), s.get("valid_checksums")
+    complete = (s.get("namespace") == "production" and planned > 0
+                and total == valid == planned and pilot["fresh_label_rows"] > 0)
     if not complete:
         return False, (
-            f"Stage 5 run {pilot['run_id']} exists but is incomplete: "
-            f"{s.get('completed')} of {s.get('completed_total')} completions, "
-            f"{s.get('valid_checksums')} checksum-valid, {s.get('request_failures')} failed "
-            "requests. Treat the fresh resampling pilot as unverified.")
+            f"Stage 5 run {pilot['run_id']} exists but is incomplete: {total} of {planned} "
+            f"planned completions recorded, {valid} checksum-valid, fresh labels for "
+            f"{pilot['fresh_label_rows']} sentences. Treat the fresh resampling pilot as "
+            "unverified.")
     return True, (
         f"The fresh resampling pilot is present and complete in this root: Stage 5 run "
-        f"{pilot['run_id']} finished {s['completed']} of {s['completed_total']} "
-        f"completions, all checksum-valid, and wrote fresh labels for "
+        f"{pilot['run_id']} holds {total} of {planned} planned completions, all "
+        f"checksum-valid, and wrote fresh labels for "
         f"{pilot['fresh_label_rows']} sentences (sidecar-verified). Project records "
         "(docs/stage5_measurements.md) identify it as the Problem 4682 pilot. "
         "result_interpretation.md said it could not be located; these restored artifacts "
