@@ -81,6 +81,11 @@ python scripts/s12_phase2_score.py --index completions_index.parquet \
 - **Eligibility:** the two MVP rules that used future information are replaced, with
   leakage tests.
 - **Memorisation:** 1 of 20 problems flagged (1591), with no verbatim recall.
+- **Phase 2 reliability replication (CONFIRMATORY, plan v2.1; 40,000 generations, n = 100 per fork):**
+  - Primary `fork_tv`, replicate 1 vs 2: Spearman 0.445 [0.198, 0.617] and ICC 0.561 [0.228, 0.676], so the continuous form is **FAIL**.
+  - The flag gives κ 0.659 [0.000, 0.855], so it is **INCONCLUSIVE**: the fixed q90 threshold flags only 6 and 3 of 190 sentences.
+  - All five scores FAIL. The result is unchanged without problem 1591, and agreement with the released samples is similar (ICC about 0.62).
+  - Details: `docs/phase2_results.md`.
 - **Prediction (full run, 8 layers; nested problem-grouped CV over all 20 problems):**
   - Activations beat every baseline in point estimate: Spearman 0.23 vs 0.15 for
     `fork_tv`.
@@ -110,7 +115,7 @@ python scripts/s12_phase2_score.py --index completions_index.parquet \
 
 ### Unresolved
 
-- The running Phase 2 result (n = 100).
+- Whether to raise resampling depth or change the target before Phase 3, after the Phase 2 FAIL.
 - The undefined "14 problems".
 - The 0.132 width reading in the Phase 3 sample size.
 - The Phase 3 problem list.
