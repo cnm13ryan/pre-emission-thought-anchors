@@ -721,3 +721,10 @@ Stage 3/4 (working tree after `060f6c0`):
   - Pilot completion is judged by `completed_total == valid_checksums ==` the planned job count. `completed` and `request_failures` cover only a resumed run's final session.
 
   All three checks pass on the real runs.
+- **choice (Codex review of `8bf5b34`):** Four follow-ups:
+  - **Stage 10 tables.** `check_lineage` binds the Stage 10 sensitivity, permutation and lead-time tables to the Stage 10 manifest's `output_hashes`. The real run passes.
+  - **Write-once report folder.** `render_report` refuses a non-empty output directory, so a rerender cannot unlink a persisted report.
+  - **Fetch resume receipts.** `s02_fetch_rollouts.py` writes a receipt per fork recording the source sha256, the revision, and the Parquet's sha256, rows and columns. Resume skips a fork only when its receipt validates; otherwise the fork is quarantined (moved aside, never deleted) and reacquired. The existing local forks predate receipts, so a rerun of s02 reacquires them.
+  - **Zero-safe common counts.** In `s12_phase2_score.py`, a replicate with no OK samples for a fork now counts as 0 (`common_counts`), and zero-common forks are reported. On the real Phase 2 index the new counts are identical to the old ones (200 forks, minimum 100), so the confirmatory result and `phase2_reliability.json` are unchanged and were not recomputed.
+
+  Regression tests were added in `tests/integration/test_report_rebuild.py` and `anchor_reliability_v2/tests/test_review_fixes.py`.

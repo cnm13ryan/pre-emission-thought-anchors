@@ -105,9 +105,6 @@ def root(tmp_path) -> Path:
                {"run_id": S9, "freeze_sha256": freeze, "predictions_sha256": test_pred,
                 "metrics_sha256": test_metrics})
     s10 = root / "artifacts/runs" / S10
-    write_json(s10 / "manifest.json",
-               {"run_id": S10, "input_hashes": {"stage9_run_id": S9, "probe_run_id": S8,
-                                                "stage9/freeze_sha256": freeze}})
     leads = [{"schema_version": 1, "sentence_id": f"{i}:test", "problem_id": 1,
               "trajectory_id": "t1", "split": "test", "lead_sentences": lead,
               "threshold_quantile": 0.9, "layer": 44, "probe_name": PRIMARY,
@@ -117,11 +114,20 @@ def root(tmp_path) -> Path:
               "available": True, "unavailable_reason": None, "y_true": i % 2,
               "importance_true": 0.1, "score_raw": 0.2, "probability": 0.1 + 0.01 * i}
              for lead in (0, 1) for i in range(10)]
-    write_parquet(s10 / "predictions/lead_time.parquet", pa.Table.from_pylist(leads))
-    write_parquet(s10 / "metrics/sensitivities.parquet",
-                  pa.Table.from_pylist([{"analysis": "threshold", "variant": "q90"}]))
-    write_parquet(s10 / "metrics/permutations.parquet",
-                  pa.Table.from_pylist([{"kind": "observed", "permutation_index": -1}]))
+    produced = {
+        "predictions/lead_time.parquet": write_parquet(
+            s10 / "predictions/lead_time.parquet", pa.Table.from_pylist(leads)),
+        "metrics/sensitivities.parquet": write_parquet(
+            s10 / "metrics/sensitivities.parquet",
+            pa.Table.from_pylist([{"analysis": "threshold", "variant": "q90"}])),
+        "metrics/permutations.parquet": write_parquet(
+            s10 / "metrics/permutations.parquet",
+            pa.Table.from_pylist([{"kind": "observed", "permutation_index": -1}])),
+    }
+    write_json(s10 / "manifest.json",
+               {"run_id": S10, "output_hashes": produced,
+                "input_hashes": {"stage9_run_id": S9, "probe_run_id": S8,
+                                 "stage9/freeze_sha256": freeze}})
     labels = [{"schema_version": 1, "sentence_id": f"{i}:test", "trajectory_id": "t1",
                "problem_id": 1, "trace_kind": "correct", "sentence_idx": i,
                "text": f"sentence {i}", "eligible": True, "exclusion_reason": None,
@@ -311,9 +317,10 @@ def test_mismatched_stage_runs_are_refused(root, tmp_path):
         render_report(root, tmp_path / "a", stage9_run_id=S9, stage10_run_id=S10,
                       stage8_run_id=other8)
     # A Stage 10 run that consumed a different Stage 9 freeze is refused too.
+    manifest10 = json.loads((root / "artifacts/runs" / S10 / "manifest.json").read_bytes())
     _replace_json(root / "artifacts/runs" / S10 / "manifest.json",
-                  {"run_id": S10, "input_hashes": {"stage9_run_id": S9, "probe_run_id": S8,
-                                                   "stage9/freeze_sha256": "0" * 64}})
+                  {**manifest10, "input_hashes": {**manifest10["input_hashes"],
+                                                  "stage9/freeze_sha256": "0" * 64}})
     with pytest.raises(ValueError, match="different Stage 9 freeze"):
         _render(root, tmp_path / "b")
 
@@ -365,3 +372,25 @@ def test_pilot_status_reflects_stage5_artifacts(tmp_path):
                   {**summary, "completed_total": 200, "valid_checksums": 200})
     pilot = {"run_id": run, **load_stage5_pilot(Sources(tmp_path), run)}
     assert I.pilot_status(pilot)[0] is False
+
+
+def test_stage10_tables_must_be_the_manifest_outputs(root, tmp_path):
+    # Codex re-review: sidecar-valid Stage 10 tables copied from another run are refused.
+    s10 = root / "artifacts/runs" / S10
+    table = s10 / "metrics/permutations.parquet"
+    for suffix in ("", ".sha256", ".schema.json", ".schema.json.sha256"):
+        Path(str(table) + suffix).unlink(missing_ok=True)
+    write_parquet(s10 / "metrics/permutations.parquet",
+                  pa.Table.from_pylist([{"kind": "observed", "permutation_index": -2}]))
+    with pytest.raises(ValueError, match="permutations.parquet does not match the manifest"):
+        _render(root, tmp_path / "out")
+
+
+def test_render_refuses_a_non_empty_output_directory(root, tmp_path):
+    # Codex re-review: rerendering must not unlink a persisted report's figures.
+    _render(root, tmp_path / "out")
+    before = {p: p.read_bytes() for p in (tmp_path / "out").rglob("*") if p.is_file()}
+    with pytest.raises(FileExistsError, match="non-empty directory"):
+        _render(root, tmp_path / "out")
+    after = {p: p.read_bytes() for p in (tmp_path / "out").rglob("*") if p.is_file()}
+    assert before == after
