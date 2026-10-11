@@ -1,0 +1,242 @@
+{
+  "stage": "exploratory",
+  "preregistered": false,
+  "scope": "Read-only blog verification; original endpoint remains frozen",
+  "counts": {
+    "test": {
+      "size": 689,
+      "sum": 25,
+      "mean": 0.036284470246734396
+    },
+    "train": {
+      "size": 2650,
+      "sum": 265,
+      "mean": 0.1
+    },
+    "validation": {
+      "size": 680,
+      "sum": 54,
+      "mean": 0.07941176470588235
+    }
+  },
+  "anchor": {
+    "validation": {
+      "ap": {
+        "activation_only": 0.17114457280905654,
+        "activation_plus_observables": 0.16450484423085468,
+        "context": 0.08288458881001509,
+        "observable_combined": 0.12662197263640068,
+        "position": 0.1330008449271038,
+        "prevalence": 0.07941176470588235,
+        "residualized_activation": 0.18799260296762885,
+        "uncertainty": 0.1178123578757756
+      },
+      "comparisons": {
+        "observable_combined": {
+          "delta": 0.037882871594454,
+          "low": -0.02028352842569925,
+          "high": 0.05898850177435862
+        },
+        "position": {
+          "delta": 0.03150399930375089,
+          "low": -0.06991307896735136,
+          "high": 0.08568008680974978
+        }
+      },
+      "permutation_p": 0.09900990099009901,
+      "problem_counts": {
+        "330": {
+          "size": 125,
+          "sum": 13
+        },
+        "2050": {
+          "size": 202,
+          "sum": 7
+        },
+        "4164": {
+          "size": 209,
+          "sum": 30
+        },
+        "6481": {
+          "size": 144,
+          "sum": 4
+        }
+      },
+      "continuous_spearman": 0.21734911970025586
+    },
+    "test": {
+      "ap": {
+        "activation_only": 0.0924820405525296,
+        "activation_plus_observables": 0.09412111859109747,
+        "context": 0.047015014009746135,
+        "observable_combined": 0.05732553928356693,
+        "position": 0.13936009900667803,
+        "prevalence": 0.036284470246734396,
+        "residualized_activation": 0.12667758345234684,
+        "uncertainty": 0.050973665050470615
+      },
+      "comparisons": {
+        "observable_combined": {
+          "delta": 0.03679557930753054,
+          "low": -0.05054543182327945,
+          "high": 0.08140098739804605
+        },
+        "position": {
+          "delta": -0.04523898041558057,
+          "low": -0.23643487264415416,
+          "high": 0.025501052907063948
+        }
+      },
+      "permutation_p": 0.16831683168316833,
+      "problem_counts": {
+        "2236": {
+          "size": 105,
+          "sum": 7
+        },
+        "2870": {
+          "size": 297,
+          "sum": 3
+        },
+        "3916": {
+          "size": 106,
+          "sum": 9
+        },
+        "6998": {
+          "size": 181,
+          "sum": 6
+        }
+      },
+      "continuous_spearman": 0.23701872753012235
+    }
+  },
+  "transition": {
+    "validation": {
+      "n": 1355,
+      "positives": 644,
+      "prevalence": 0.4752767527675277,
+      "activation_ap": 0.8050338808372113,
+      "prefix_baseline_ap": 0.76234678026443,
+      "delta": 0.042687100572781245,
+      "low": 0.011633035047749485,
+      "high": 0.07692379354371726,
+      "bootstrap_seed": 2555326506,
+      "C": {
+        "activation": 0.0001,
+        "prefix_baseline": 0.001
+      }
+    },
+    "test": {
+      "n": 1073,
+      "positives": 645,
+      "prevalence": 0.6011183597390494,
+      "activation_ap": 0.8478565658524867,
+      "prefix_baseline_ap": 0.7923971402266554,
+      "delta": 0.05545942562583128,
+      "low": 0.023656534508107008,
+      "high": 0.09150286404313934,
+      "bootstrap_seed": 2791130995,
+      "C": {
+        "activation": 0.0001,
+        "prefix_baseline": 0.001
+      }
+    }
+  },
+  "smoothing": {
+    "0_5": {
+      "threshold": 0.24619239326587636,
+      "spearman": 0.7049433733459783,
+      "intersection": 117,
+      "union": 627,
+      "jaccard": 0.18660287081339713
+    },
+    "1_0": {
+      "threshold": 0.26555698694073915,
+      "spearman": 0.598448162548741,
+      "intersection": 86,
+      "union": 662,
+      "jaccard": 0.1299093655589124
+    }
+  },
+  "lead": {
+    "validation": {
+      "0": {
+        "ap": 0.16565498719550464,
+        "n": 672,
+        "positives": 53,
+        "prevalence": 0.07886904761904762
+      },
+      "1": {
+        "ap": 0.1726026729544928,
+        "n": 672,
+        "positives": 53,
+        "prevalence": 0.07886904761904762
+      }
+    },
+    "test": {
+      "0": {
+        "ap": 0.07737601141208916,
+        "n": 683,
+        "positives": 22,
+        "prevalence": 0.032210834553440704
+      },
+      "1": {
+        "ap": 0.031851053588074815,
+        "n": 683,
+        "positives": 22,
+        "prevalence": 0.032210834553440704
+      }
+    }
+  },
+  "position_cuts": [
+    25.0,
+    53.0,
+    86.0,
+    129.0
+  ],
+  "early_test": {
+    "absolute_index_0_to_25": 15,
+    "first_fifth_of_eligible_rows": 7
+  },
+  "no_answer": {
+    "0": {
+      "size": 2868,
+      "sum": 104,
+      "mean": 0.03626220362622036
+    },
+    "(0, 5%]": {
+      "size": 689,
+      "sum": 70,
+      "mean": 0.10159651669085631
+    },
+    "(5%, 20%]": {
+      "size": 297,
+      "sum": 92,
+      "mean": 0.30976430976430974
+    },
+    ">20%": {
+      "size": 165,
+      "sum": 78,
+      "mean": 0.4727272727272727
+    }
+  },
+  "no_answer_spearman": 0.451740619740246,
+  "source_sha256": {
+    "/Users/cnm13ryan/preanchor-root/data/processed/stage4/labels.parquet": "fab9886e478922ac132d0a98f3320c3047cb87cd6252c0d06117b99861a61b31",
+    "/Users/cnm13ryan/preanchor-root/data/processed/stage7/features.parquet": "f3227c386383701741aa284cc3bbf6b7c3205f2de9593616575bf1187e9a064d",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T193326Z-57bcb41c84-7ebd0db6/probe_models/cv_results.parquet": "d3aeae7092a878f552c46c8c89ade869e57b1ae4da34a23d56ed7acac56fcac1",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T201107Z-484989d2fe-19f1ab0d/frozen_selection.json": "e68f1d829145431481d81d25c1546773d81e66c3cd3a39a1fdd98f298113e0bf",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T201107Z-484989d2fe-19f1ab0d/metrics/test_receipt.json": "a6ef2ba89b227f2d610ad226836afadddefa8928cf0dce813a44561f93432b00",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T211903Z-b230473011-815ca2b7/metrics/sensitivities.parquet": "f4b6e48883aeb396ebf6a219b549238f4526872efeecc9fe3fb043f01d029cea",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T211903Z-b230473011-815ca2b7/metrics/permutations.parquet": "1adf0eb45794d1bcf88ad7b70a5a0218a4ff054936d966938bd5dd48d7cde5ac",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T211903Z-b230473011-815ca2b7/predictions/lead_time.parquet": "4e6055304b8edf688abdb19ab15eb4a089757ddc13ce75cc5f9e5e5771f8d203",
+    "/Users/cnm13ryan/git/pre-emission-thought-anchors/research/reasoning_stage/outputs/analysis_results.json": "76d031d938e156a753522c28e4657d0b81524f0145396b99d436a56c48097075",
+    "/Users/cnm13ryan/git/pre-emission-thought-anchors/research/reasoning_stage/outputs/dataset.parquet": "85c36bed1aca81758ba8b0610448af896027a1e65465987b30bf16d70ffe7a0c",
+    "/Users/cnm13ryan/git/pre-emission-thought-anchors/research/reasoning_stage/outputs/activations_l0.npy": "3d063e2ecce1d585c5aad5bb8e4bce6ba6b028d4e582ecc3589eedd7a2dde446",
+    "/Users/cnm13ryan/git/pre-emission-thought-anchors/research/reasoning_stage/outputs/activations_l44.npy": "d5f1254a2fca393ca4f13b9ebb0cdfbb381ed576b7044229de0ebdc2ca443099",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T201107Z-484989d2fe-19f1ab0d/predictions/validation.parquet": "779d1a2099823a26093e9d367c37e08ef55fdec49a50f83e2096b8999252b93e",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T201107Z-484989d2fe-19f1ab0d/metrics/validation.json": "09376ca69b44b271aa7376c23615cee4b3edc4df90b316e73c049f0ec12e55ac",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T201107Z-484989d2fe-19f1ab0d/predictions/test.parquet": "86e90d79b4a8855d1306372d5333f3c670198c6cdbf7c1defff6d0dd8d352c93",
+    "/Users/cnm13ryan/preanchor-root/artifacts/runs/20260915T201107Z-484989d2fe-19f1ab0d/metrics/test.json": "8a16c03cf446c38372ba6b7f1aa7ba935c43daa6d8cec2f90b21a05129b1ec74"
+  },
+  "script_sha256": "d545d8902936d1996af82e2fed7458c78a5109683b6a66003ae21fe2a50ba253"
+}
