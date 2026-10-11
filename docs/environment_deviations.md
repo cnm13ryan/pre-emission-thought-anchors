@@ -81,3 +81,19 @@ installing an unneeded, unpinned pip or hiding the collector failure.
   the client's retries succeeded and every unit validated. Lock hashes unchanged.
 - **Hourly rate:** `PREANCHOR_HOURLY_RATE` is required by Stage 5 projections and is
   currently unset in `.env`.
+
+## Redesign Phase 1 — 2026-10-09 (parent commit `f11823f`, MacBook, CPU/MPS only)
+
+- **Separate analysis environment (fact):** the locked CPU `.venv` has no torch,
+  transformers or sentence-transformers, and the GPU extra pins Linux CUDA wheels. The
+  exploratory Phase 1 scripts in `research/redesign/` therefore run in an untracked venv at
+  `~/preanchor-root/cache/redesign-venv`, with the same package versions as `uv.lock`
+  where they exist (torch 2.7.0 macOS wheel, transformers 4.53.2,
+  sentence-transformers 5.0.0, pandas 2.3.1, pyarrow 20.0.0, scikit-learn 1.7.1,
+  scipy 1.16.0, numpy 2.2.6, huggingface_hub 0.33.4). The freeze is
+  `~/preanchor-root/cache/redesign-venv-freeze.txt`. `uv.lock` and `.venv` are unchanged.
+  No frozen stage was rerun in this environment.
+- **Device differences (fact):** MiniLM similarity runs on MPS rather than the Stage 4
+  CUDA device, and layer-48 next-token distributions are recomputed in bf16 on MPS. Both
+  are checked against the stored values, and the agreement is reported in
+  `research/redesign/phase1_report.md`.
