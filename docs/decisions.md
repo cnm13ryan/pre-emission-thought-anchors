@@ -715,3 +715,9 @@ Stage 3/4 (working tree after `060f6c0`):
   No other model changed, and no interval now excludes zero. Exploratory analysis; no frozen MVP item is involved.
 - **choice:** `render_report` and the Streamlit dashboard now refuse Stage 8, 9 and 10 runs that are not one lineage. The checks are: Stage 9 `probe_run_id` and its recorded Stage 8 file hashes; the freeze hash in Stage 9's metrics and test receipt, which must equal the hash of `frozen_selection.json`; and Stage 10's manifest record of the Stage 9 run, Stage 8 run and freeze hash. The real Stage 8, 9 and 10 runs pass. Regression tests were added in `tests/integration/test_report_rebuild.py`.
 - **fact / correction:** The fresh Stage 5 pilot exists and is complete: run `20260915T144926Z-bb9ba695de-9fca4c21`, 256 of 256 checksum-valid completions, with `fresh_labels.parquet` holding 5 sentences. The dashboard now derives the pilot's status from these sidecar-verified files instead of fixed text, and `result_interpretation.md` carries a dated correction. No conclusion changes.
+- **choice (Codex re-review of `6470696`):** Three follow-ups:
+  - The lineage check also verifies Stage 9's validation predictions, validation metrics and calibrator against the hashes frozen in `frozen_selection.json`, and the test predictions and metrics against the hashes in the test receipt.
+  - The dashboard follows the newest Stage 10 manifest back to the Stage 9 and Stage 8 runs it consumed, instead of taking each stage's newest run.
+  - Pilot completion is judged by `completed_total == valid_checksums ==` the planned job count. `completed` and `request_failures` cover only a resumed run's final session.
+
+  All three checks pass on the real runs.

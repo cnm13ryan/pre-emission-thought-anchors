@@ -41,7 +41,7 @@ def _predictions(seed: int, split: str) -> pa.Table:
     return pa.Table.from_pylist(rows)
 
 
-def _metrics(split: str, freeze: str) -> dict:
+def _metrics(split: str, freeze: str | None) -> dict:
     model = {"average_precision": 0.1, "auroc": 0.6, "brier": 0.07, "ece": 0.08,
              "log_loss": 0.33, "n": 60, "n_positive": 6, "prevalence": 0.1,
              "calibrated": True, "n_trajectories": 8, "n_trajectories_with_positive": 4,
@@ -82,20 +82,28 @@ def root(tmp_path) -> Path:
                              {"binary": {"layer": 44, "C": 0.1, "probe_name": PRIMARY},
                               "anchor_threshold": 1.35})
     s9 = root / "artifacts/runs" / S9
-    # Lineage the report checks: Stage 9 records the Stage 8 run and file hashes it froze
-    # from, and the freeze hash is the hash of frozen_selection.json.
+    # Lineage the report checks, in the order Stage 9 writes it: validation artifacts and the
+    # calibrator are frozen by hash into frozen_selection.json; the freeze hash is the hash of
+    # that file; the test receipt binds the freeze and the test predictions and metrics.
+    val_pred = write_parquet(s9 / "predictions/validation.parquet",
+                             _predictions(len("validation"), "validation"))
+    val_metrics = write_json(s9 / "metrics/validation.json", _metrics("validation", None))
+    calibrator = write_json(s9 / "probe_models/calibrator.json",
+                            {"method": "platt", "fitted_on": "validation",
+                             "parameters": {"A": -0.1, "B": 1.9}})
     freeze = write_json(s9 / "frozen_selection.json",
                         {"binary": {"layer": 44, "C": 0.1, "probe_name": PRIMARY},
                          "anchor_threshold": 1.35, "probe_run_id": S8,
-                         "cv_results_sha256": cv_sha, "pending_selection_sha256": pending_sha})
-    for split in ("validation", "test"):
-        write_parquet(s9 / f"predictions/{split}.parquet",
-                      _predictions(len(split), split))
-        write_json(s9 / f"metrics/{split}.json", _metrics(split, freeze))
-    write_json(s9 / "metrics/test_receipt.json", {"run_id": S9, "freeze_sha256": freeze})
-    write_json(s9 / "probe_models/calibrator.json",
-               {"method": "platt", "fitted_on": "validation",
-                "parameters": {"A": -0.1, "B": 1.9}})
+                         "cv_results_sha256": cv_sha, "pending_selection_sha256": pending_sha,
+                         "validation_predictions_sha256": val_pred,
+                         "validation_metrics_sha256": val_metrics,
+                         "calibration": {"calibrator_sha256": calibrator}})
+    test_pred = write_parquet(s9 / "predictions/test.parquet",
+                              _predictions(len("test"), "test"))
+    test_metrics = write_json(s9 / "metrics/test.json", _metrics("test", freeze))
+    write_json(s9 / "metrics/test_receipt.json",
+               {"run_id": S9, "freeze_sha256": freeze, "predictions_sha256": test_pred,
+                "metrics_sha256": test_metrics})
     s10 = root / "artifacts/runs" / S10
     write_json(s10 / "manifest.json",
                {"run_id": S10, "input_hashes": {"stage9_run_id": S9, "probe_run_id": S8,
@@ -312,9 +320,25 @@ def test_mismatched_stage_runs_are_refused(root, tmp_path):
 
 def test_freeze_hash_must_match_frozen_selection(root, tmp_path):
     s9 = root / "artifacts/runs" / S9
-    _replace_json(s9 / "metrics/test_receipt.json", {"run_id": S9, "freeze_sha256": "e" * 64})
+    receipt = json.loads((s9 / "metrics/test_receipt.json").read_bytes())
+    _replace_json(s9 / "metrics/test_receipt.json", {**receipt, "freeze_sha256": "e" * 64})
     with pytest.raises(ValueError, match="test_receipt.json freeze hash"):
         _render(root, tmp_path / "out")
+
+
+def test_frozen_validation_artifacts_must_match(root, tmp_path):
+    # Codex re-review: sidecar-valid validation results from another run must be refused.
+    s9 = root / "artifacts/runs" / S9
+    other = json.loads((s9 / "metrics/validation.json").read_bytes())
+    _replace_json(s9 / "metrics/validation.json", {**other, "run_id": "another-run"})
+    with pytest.raises(ValueError, match="metrics/validation.json does not match"):
+        _render(root, tmp_path / "out")
+
+
+def test_dashboard_lineage_follows_stage10_manifest(root):
+    from preanchor.report.loaders import lineage_from_stage10
+
+    assert lineage_from_stage10(root, S10) == {"stage10": S10, "stage9": S9, "stage8": S8}
 
 
 def test_pilot_status_reflects_stage5_artifacts(tmp_path):
@@ -325,9 +349,12 @@ def test_pilot_status_reflects_stage5_artifacts(tmp_path):
     assert I.pilot_status(None) == (False, I.PILOT_STATUS)
     run = "20990101T000000Z-fake-stage05"
     stage5 = tmp_path / "artifacts/runs" / run / "stages/stage5"
-    summary = {"run_id": run, "namespace": "production", "completed": 256,
-               "completed_total": 256, "valid_checksums": 256, "request_failures": 0}
+    # A resumed run: the final session produced 56 completions, 200 were durable before it.
+    summary = {"run_id": run, "namespace": "production", "completed": 56,
+               "resumed_prior_completions": 200, "completed_total": 256,
+               "valid_checksums": 256, "request_failures": 1}
     write_json(stage5 / "summary.json", summary)
+    write_json(stage5 / "plan.json", {"jobs": [{"fork_idx": i % 8} for i in range(256)]})
     write_parquet(stage5 / "fresh_labels.parquet",
                   pa.Table.from_pylist([{"sentence_idx": i} for i in range(5)]))
     assert find_stage5_pilot(tmp_path) == run
@@ -335,6 +362,6 @@ def test_pilot_status_reflects_stage5_artifacts(tmp_path):
     verified, text = I.pilot_status(pilot)
     assert verified and "256 of 256" in text and "5 sentences" in text
     _replace_json(stage5 / "summary.json",
-                  {**summary, "completed": 200, "valid_checksums": 200})
+                  {**summary, "completed_total": 200, "valid_checksums": 200})
     pilot = {"run_id": run, **load_stage5_pilot(Sources(tmp_path), run)}
     assert I.pilot_status(pilot)[0] is False

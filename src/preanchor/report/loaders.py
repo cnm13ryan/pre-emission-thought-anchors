@@ -114,7 +114,19 @@ def check_lineage(sources: Sources, s9: dict, *, stage8_run_id: str, stage9_run_
         actual = seen.get(sources.run_relative(stage8_run_id, STAGE8_FILES[key]))
         if frozen.get(field) != actual:
             problems.append(f"Stage 9 {field} does not match Stage 8 {STAGE8_FILES[key]}")
-    freeze = seen.get(sources.run_relative(stage9_run_id, STAGE9_FILES["frozen_selection"]))
+    def stage9_hash(key: str) -> str | None:
+        return seen.get(sources.run_relative(stage9_run_id, STAGE9_FILES[key]))
+
+    # Validation artifacts were frozen by hash; the test artifacts are bound by the receipt.
+    bound = {"predictions_validation": frozen.get("validation_predictions_sha256"),
+             "metrics_validation": frozen.get("validation_metrics_sha256"),
+             "calibrator": (frozen.get("calibration") or {}).get("calibrator_sha256"),
+             "predictions_test": s9["test_receipt"].get("predictions_sha256"),
+             "metrics_test": s9["test_receipt"].get("metrics_sha256")}
+    for key, recorded in bound.items():
+        if recorded != stage9_hash(key):
+            problems.append(f"Stage 9 {STAGE9_FILES[key]} does not match its recorded hash")
+    freeze = stage9_hash("frozen_selection")
     for key in ("metrics_test", "test_receipt"):
         record = s9[key]
         if record.get("run_id") != stage9_run_id:
@@ -138,6 +150,16 @@ def check_lineage(sources: Sources, s9: dict, *, stage8_run_id: str, stage9_run_
         raise ValueError("Stage 8-10 runs are not one lineage: " + "; ".join(problems))
 
 
+def lineage_from_stage10(root: Path, stage10_run_id: str) -> dict[str, str]:
+    """Stage 8 and 9 run ids recorded in a Stage 10 manifest (sidecar-verified), so a
+    dashboard can follow one coherent lineage instead of picking each stage's latest run."""
+    sources = Sources(Path(root))
+    manifest = sources.read_json(sources.run_relative(stage10_run_id, "manifest.json"))
+    consumed = manifest.get("input_hashes", {})
+    return {"stage10": stage10_run_id, "stage9": consumed.get("stage9_run_id"),
+            "stage8": consumed.get("probe_run_id")}
+
+
 def find_stage5_pilot(root: Path) -> str | None:
     """Latest run holding a Stage 5 production summary, or None. The caller verifies it."""
     runs = Path(root) / "artifacts/runs"
@@ -150,10 +172,12 @@ def find_stage5_pilot(root: Path) -> str | None:
 
 
 def load_stage5_pilot(sources: Sources, run_id: str) -> dict:
-    """Sidecar-verified Stage 5 summary, plus a verified read of its fresh labels."""
+    """Sidecar-verified Stage 5 summary and plan, plus a verified read of its fresh labels."""
     summary = sources.read_json(sources.run_relative(run_id, "stages/stage5/summary.json"))
+    plan = sources.read_json(sources.run_relative(run_id, "stages/stage5/plan.json"))
     labels = sources.read_table(sources.run_relative(run_id, "stages/stage5/fresh_labels.parquet"))
-    return {"summary": summary, "fresh_label_rows": labels.num_rows}
+    return {"summary": summary, "planned_jobs": len(plan.get("jobs", [])),
+            "fresh_label_rows": labels.num_rows}
 
 
 def load_tables(sources: Sources, keys: list[str] | None = None,
