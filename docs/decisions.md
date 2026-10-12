@@ -686,3 +686,49 @@ Stage 3/4 (working tree after `060f6c0`):
   and on supported rows, vanishes at q95 and at lead one on test, and lies inside the
   stratified permutation null (84th percentile on test, 91st on validation). Nothing here
   reopens Stage 8/9 selection.
+## 2026-09-18: research-post evidence audit (parent commit `f11823f`)
+
+- **choice:** Reproduce headline AP and problem-bootstrap comparisons from saved predictions, and reproduce the existing transition models at their saved C values. Store provenance, predictions and figure inputs in `research/blog/`. Rejected: treating prior prose as authoritative or reopening frozen model selection.
+- **fact:** The test's 15 early anchors are at absolute sentence indices 0–25, not in each trajectory's first eligible-position quintile; that relative definition gives seven. The post and new position figure distinguish these definitions.
+- **choice:** Compare transition decoding with previous-sentence stage plus position (validation/test AP 0.7623/0.7924). Rejected: highlighting only the weaker position or registered-observables comparison. Independently seeded paired problem bootstraps are exploratory and recorded in `research/blog/evidence.json`.
+- **choice:** Compare anchor lead zero and lead one on identical target rows. Rejected: plotting the unfiltered lead-zero score against the smaller lead-one population.
+- **interpretation:** Anchor activation gains are not established beyond strong observables; smoothing sensitivity concerns the estimator, and missing-answer association is not a decomposition of KL. Transition decoding remains compatible with lexical preparation. No frozen scientific choice or locked evaluation was changed.
+## 2026-10-09: redesign Phase 1 (parent commit `f11823f`; exploratory, no frozen change)
+
+- **choice:** Reacquire the released raw forks (pinned revision, hash-checked against the Stage 4 raw run's source manifest) into a compact per-rollout table, and recompute labels on CPU/MPS. Rejected: reporting items 1–2 as blocked on saved aggregates alone. Owner authorised the download on 2026-10-09.
+- **fact:** The recomputation reproduces every eligible `importance_canonical`, `dissimilar_count` and α-sensitivity value exactly. At α = 1e-9, 330/344 anchors draw at least half of I from answers absent from the "with" group; 309 of those are real answers and 21 are `<NO_ANSWER>`. `<NO_ANSWER>` totals 11,181 samples: 9,739 length-truncated, 5 parse failures, 1,437 other (which mixes unboxed stated answers with early stops).
+- **fact:** Split-half κ for the q90 anchor flag is 0.195 (α = 1e-9), 0.445 (α = ½) and 0.417 (fork TV). These are lower bounds at N ≈ 50 per half.
+- **choice:** Candidate rules were fixed in `research/redesign/phase1_analysis_plan.md` before the data were read. No test-split metric was computed. Rejected: scoring new labels or baselines on test.
+- **interpretation:** These findings support the review's diagnosis that the current anchor flag is dominated by rare unseen answers, mostly real answers. No label is adopted; any adoption needs an amendment and owner approval. Report: `research/redesign/phase1_report.md`.
+## 2026-10-11: Codex review fixes on PR #5
+
+- **fact:** In `anchor_reliability_v2/scripts/s11_evaluate.py`, "strongest + activation" searched only three fixed baseline families, so it was not nested in the strongest-baseline comparison.
+- **choice:** Each outer fold now adds activations to the baseline family that fold's strongest-baseline search selected; inner CV chooses only the layer and penalty. Rejected: widening the augmented search to all families. That was tried first, and fold 4 of the flag target then paired activations with `observables` while its strongest baseline was `next_top20`, so the comparison was still not nested.
+- **fact:** Corrected comparisons:
+
+  | Target | Before | After |
+  |---|---|---|
+  | flag AP | +0.048 [+0.001, +0.093] | +0.036 [−0.002, +0.085] |
+  | `fork_tv` | +0.073 | +0.045 [−0.043, +0.107] |
+  | KL anchor | +0.057 | +0.014 [−0.009, +0.041] |
+
+  No other model changed, and no interval now excludes zero. Exploratory analysis; no frozen MVP item is involved.
+- **choice:** `render_report` and the Streamlit dashboard now refuse Stage 8, 9 and 10 runs that are not one lineage. The checks are: Stage 9 `probe_run_id` and its recorded Stage 8 file hashes; the freeze hash in Stage 9's metrics and test receipt, which must equal the hash of `frozen_selection.json`; and Stage 10's manifest record of the Stage 9 run, Stage 8 run and freeze hash. The real Stage 8, 9 and 10 runs pass. Regression tests were added in `tests/integration/test_report_rebuild.py`.
+- **fact / correction:** The fresh Stage 5 pilot exists and is complete: run `20260915T144926Z-bb9ba695de-9fca4c21`, 256 of 256 checksum-valid completions, with `fresh_labels.parquet` holding 5 sentences. The dashboard now derives the pilot's status from these sidecar-verified files instead of fixed text, and `result_interpretation.md` carries a dated correction. No conclusion changes.
+- **choice (Codex re-review of `6470696`):** Three follow-ups:
+  - The lineage check also verifies Stage 9's validation predictions, validation metrics and calibrator against the hashes frozen in `frozen_selection.json`, and the test predictions and metrics against the hashes in the test receipt.
+  - The dashboard follows the newest Stage 10 manifest back to the Stage 9 and Stage 8 runs it consumed, instead of taking each stage's newest run.
+  - Pilot completion is judged by `completed_total == valid_checksums ==` the planned job count. `completed` and `request_failures` cover only a resumed run's final session.
+
+  All three checks pass on the real runs.
+- **choice (Codex review of `8bf5b34`):** Four follow-ups:
+  - **Stage 10 tables.** `check_lineage` binds the Stage 10 sensitivity, permutation and lead-time tables to the Stage 10 manifest's `output_hashes`. The real run passes.
+  - **Write-once report folder.** `render_report` refuses a non-empty output directory, so a rerender cannot unlink a persisted report.
+  - **Fetch resume receipts.** `s02_fetch_rollouts.py` writes a receipt per fork recording the source sha256, the revision, and the Parquet's sha256, rows and columns. Resume skips a fork only when its receipt validates; otherwise the fork is quarantined (moved aside, never deleted) and reacquired. The existing local forks predate receipts, so a rerun of s02 reacquires them.
+  - **Zero-safe common counts.** In `s12_phase2_score.py`, a replicate with no OK samples for a fork now counts as 0 (`common_counts`), and zero-common forks are reported. On the real Phase 2 index the new counts are identical to the old ones (200 forks, minimum 100), so the confirmatory result and `phase2_reliability.json` are unchanged and were not recomputed.
+
+  Regression tests were added in `tests/integration/test_report_rebuild.py` and `anchor_reliability_v2/tests/test_review_fixes.py`.
+- **choice (Codex review of `333e0dc`):** Two fixes and one deliberate non-change:
+  - **Canonicaliser safety.** `arv2/canon.py` no longer hands untrusted model answers straight to SymPy's `parse_expr`, which evaluates Python. A whitelist allows only digits, operators, brackets, `!`, commas and spaces, the names `sqrt` and `pi`, and single-letter variables. Literal factorials are capped at 4 digits, because SymPy evaluates them while parsing. Each expression is then parsed without evaluation and refused if its digit bound exceeds 100,000. Over the 1,124 distinct answer surfaces in the study data, only 11 keys change, all from meaningless SymPy products of letters (prose answers) to the string rule. Category partitions are identical (no splits, no merges), so every committed number is unchanged.
+  - **Stale summary.** The "11 of 12" summary in `evaluation_results.md` now reads 12 of 12.
+  - **Not changed: the s11 flag threshold.** It stays per training fold, as `docs/evaluation_design.md` §C specifies. The CV pools all 20 MVP problems, so the fixed MVP-train q90 would partly come from each fold's test problems. The fixed threshold applies to Phase 2 reliability and Phase 3 labels. A code comment records this.

@@ -1,0 +1,1344 @@
+{
+ "layer_curve_primary_flag_ap": {
+  "24": 0.13727418661203217,
+  "48": 0.15706803486885051
+ },
+ "layers": [
+  24,
+  48
+ ],
+ "lead_time": {
+  "fork_tv": {
+   "lead0_minus_lead1": {
+    "lead0 - lead1": {
+     "delta": 0.0010445921781638556,
+     "hi": 0.039576034810168116,
+     "lo": -0.04074864468522849,
+     "nonfinite_draws": 0
+    }
+   },
+   "models": {
+    "lead0": {
+     "hi": 0.24741657737598266,
+     "lo": 0.1260973481013857,
+     "metric": 0.18225661928177167,
+     "nonfinite_draws": 0
+    },
+    "lead1": {
+     "hi": 0.24272972265119136,
+     "lo": 0.13533591210799809,
+     "metric": 0.18121202710360781,
+     "nonfinite_draws": 0
+    }
+   },
+   "rows": 4699
+  },
+  "fork_tv_flag_q90": {
+   "lead0_minus_lead1": {
+    "lead0 - lead1": {
+     "delta": 0.010218123020478392,
+     "hi": 0.048715890162381606,
+     "lo": -0.01930989289590287,
+     "nonfinite_draws": 0
+    }
+   },
+   "models": {
+    "lead0": {
+     "hi": 0.26041539694247035,
+     "lo": 0.0656753228668321,
+     "metric": 0.14141171617003792,
+     "nonfinite_draws": 0
+    },
+    "lead1": {
+     "hi": 0.2096924656097002,
+     "lo": 0.07375778336346533,
+     "metric": 0.13119359314955953,
+     "nonfinite_draws": 0
+    }
+   },
+   "rows": 4699
+  }
+ },
+ "noise_ceiling": {
+  "ceiling_correlation": 0.8729164706633389,
+  "note": "max expected correlation of any predictor with a single-replicate score",
+  "projected_full_n_reliability": 0.7619831647553398
+ },
+ "primary_score": "fork_tv",
+ "problems": 20,
+ "rows": 4739,
+ "stage": "exploratory",
+ "targets": {
+  "fork_tv": {
+   "chosen": {
+    "activation": [
+     {
+      "fold": 0,
+      "h": 100.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 1,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 2,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 3,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 4,
+      "h": 1000.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 48
+      }
+     }
+    ],
+    "bow16": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     }
+    ],
+    "markers": [
+     {
+      "fold": 0,
+      "h": 10.0,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10.0,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10.0,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     }
+    ],
+    "next_top20": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     }
+    ],
+    "observables": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     }
+    ],
+    "observables+activation": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 4,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     }
+    ],
+    "position": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 100.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 1000.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     }
+    ],
+    "prev_token": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     }
+    ],
+    "strongest+activation": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 1,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 4,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "position",
+        "act"
+       ],
+       "layer": 48
+      }
+     }
+    ],
+    "strongest_baseline": [
+     {
+      "fold": 0,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 100.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 10.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 10000.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 1000.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     }
+    ]
+   },
+   "kind": "continuous",
+   "models": {
+    "activation": {
+     "hi": 0.285616054423533,
+     "lo": 0.14121887476631212,
+     "metric": 0.2104875029320202,
+     "nonfinite_draws": 0
+    },
+    "bow16": {
+     "hi": 0.19073327314483104,
+     "lo": 0.0679322308395825,
+     "metric": 0.12061174244552557,
+     "nonfinite_draws": 0
+    },
+    "markers": {
+     "hi": 0.08869391646887322,
+     "lo": -0.0304391277828906,
+     "metric": 0.021523977329155876,
+     "nonfinite_draws": 0
+    },
+    "next_top20": {
+     "hi": 0.10511996629428225,
+     "lo": 0.000271678182499289,
+     "metric": 0.046846239595529755,
+     "nonfinite_draws": 0
+    },
+    "observables": {
+     "hi": 0.2631328382114893,
+     "lo": 0.060697871222163566,
+     "metric": 0.14116037274808133,
+     "nonfinite_draws": 0
+    },
+    "observables+activation": {
+     "hi": 0.2872540241830294,
+     "lo": 0.14877815226222302,
+     "metric": 0.2044191511211762,
+     "nonfinite_draws": 0
+    },
+    "position": {
+     "hi": 0.29500353176563837,
+     "lo": 0.06889993843760528,
+     "metric": 0.15182081398477812,
+     "nonfinite_draws": 0
+    },
+    "prev_token": {
+     "hi": 0.04343755877502526,
+     "lo": -0.14578288308874152,
+     "metric": -0.06116571629317383,
+     "nonfinite_draws": 0
+    },
+    "strongest+activation": {
+     "hi": 0.2812079801174866,
+     "lo": 0.14247320354870366,
+     "metric": 0.19852706759073707,
+     "nonfinite_draws": 0
+    },
+    "strongest_baseline": {
+     "hi": 0.29500353176563837,
+     "lo": 0.06889993843760528,
+     "metric": 0.15182081398477812,
+     "nonfinite_draws": 0
+    }
+   },
+   "nested": {
+    "activation - position": {
+     "delta": 0.058666688947242085,
+     "hi": 0.17183211631200315,
+     "lo": -0.10269923840120791,
+     "nonfinite_draws": 0
+    },
+    "activation - strongest_baseline": {
+     "delta": 0.058666688947242085,
+     "hi": 0.17183211631200315,
+     "lo": -0.10269923840120791,
+     "nonfinite_draws": 0
+    },
+    "observables+activation - observables": {
+     "delta": 0.06325877837309488,
+     "hi": 0.122394997053321,
+     "lo": -0.014239660184536342,
+     "nonfinite_draws": 0
+    },
+    "strongest+activation - strongest_baseline": {
+     "delta": 0.04670625360595895,
+     "hi": 0.11717996935671707,
+     "lo": -0.04538663676741348,
+     "nonfinite_draws": 0
+    }
+   },
+   "prevalence": null
+  },
+  "fork_tv_flag_q90": {
+   "chosen": {
+    "activation": [
+     {
+      "fold": 0,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 2,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "act"
+       ],
+       "layer": 24
+      }
+     }
+    ],
+    "bow16": [
+     {
+      "fold": 0,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.1,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "bow16"
+       ]
+      }
+     }
+    ],
+    "markers": [
+     {
+      "fold": 0,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "markers"
+       ]
+      }
+     }
+    ],
+    "next_top20": [
+     {
+      "fold": 0,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     }
+    ],
+    "observables": [
+     {
+      "fold": 0,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.1,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     }
+    ],
+    "observables+activation": [
+     {
+      "fold": 0,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     }
+    ],
+    "position": [
+     {
+      "fold": 0,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.1,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     }
+    ],
+    "prev_token": [
+     {
+      "fold": 0,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.1,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.1,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "prev_token"
+       ]
+      }
+     }
+    ],
+    "strongest+activation": [
+     {
+      "fold": 0,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 1,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 48
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "observables",
+        "act"
+       ],
+       "layer": 24
+      }
+     }
+    ],
+    "strongest_baseline": [
+     {
+      "fold": 0,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 1,
+      "h": 1.0,
+      "spec": {
+       "blocks": [
+        "position"
+       ]
+      }
+     },
+     {
+      "fold": 2,
+      "h": 0.1,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 3,
+      "h": 0.01,
+      "spec": {
+       "blocks": [
+        "observables"
+       ]
+      }
+     },
+     {
+      "fold": 4,
+      "h": 0.001,
+      "spec": {
+       "blocks": [
+        "next_top20"
+       ]
+      }
+     }
+    ]
+   },
+   "kind": "binary",
+   "models": {
+    "activation": {
+     "hi": 0.27130228655883176,
+     "lo": 0.06586388361646164,
+     "metric": 0.1520461018051406,
+     "nonfinite_draws": 0
+    },
+    "bow16": {
+     "hi": 0.2022943897924907,
+     "lo": 0.06745336661639492,
+     "metric": 0.13805624070212058,
+     "nonfinite_draws": 0
+    },
+    "markers": {
+     "hi": 0.1813670684895684,
+     "lo": 0.08000518214864412,
+     "metric": 0.1226367698761262,
+     "nonfinite_draws": 0
+    },
+    "next_top20": {
+     "hi": 0.195825907817864,
+     "lo": 0.07473800966223966,
+     "metric": 0.13157223964916298,
+     "nonfinite_draws": 0
+    },
+    "observables": {
+     "hi": 0.2129566478482458,
+     "lo": 0.08312192117423425,
+     "metric": 0.13484720190159216,
+     "nonfinite_draws": 0
+    },
+    "observables+activation": {
+     "hi": 0.29291326437485465,
+     "lo": 0.07769302067558627,
+     "metric": 0.16801144553650532,
+     "nonfinite_draws": 0
+    },
+    "position": {
+     "hi": 0.20863248698690828,
+     "lo": 0.07024569511461312,
+     "metric": 0.1243278225733665,
+     "nonfinite_draws": 0
+    },
+    "prev_token": {
+     "hi": 0.2017733773571965,
+     "lo": 0.07068082594973256,
+     "metric": 0.1271179587991612,
+     "nonfinite_draws": 0
+    },
+    "strongest+activation": {
+     "hi": 0.29291326437485465,
+     "lo": 0.07769302067558627,
+     "metric": 0.16801144553650532,
+     "nonfinite_draws": 0
+    },
+    "strongest_baseline": {
+     "hi": 0.18662893808706035,
+     "lo": 0.08066731349242193,
+     "metric": 0.12049289252826317,
+     "nonfinite_draws": 0
+    }
+   },
+   "nested": {
+    "activation - position": {
+     "delta": 0.027718279231774112,
+     "hi": 0.07854815888275939,
+     "lo": -0.025498928528034422,
+     "nonfinite_draws": 0
+    },
+    "activation - strongest_baseline": {
+     "delta": 0.031553209276877436,
+     "hi": 0.088313070704901,
+     "lo": -0.026582883932158713,
+     "nonfinite_draws": 0
+    },
+    "observables+activation - observables": {
+     "delta": 0.03316424363491316,
+     "hi": 0.09129322802337578,
+     "lo": -0.0253932112923599,
+     "nonfinite_draws": 0
+    },
+    "strongest+activation - strongest_baseline": {
+     "delta": 0.04751855300824215,
+     "hi": 0.1100630597440962,
+     "lo": -0.012934769932170246,
+     "nonfinite_draws": 0
+    }
+   },
+   "prevalence": 0.10825068579869171
+  },
+  "mvp_kl_anchor": {
+   "kind": "binary",
+   "models": {
+    "activation": {
+     "hi": 0.2682961522599961,
+     "lo": 0.04964616434374286,
+     "metric": 0.16202838507332132,
+     "nonfinite_draws": 0
+    },
+    "bow16": {
+     "hi": 0.17039662059867727,
+     "lo": 0.03224096074614712,
+     "metric": 0.08585990686906539,
+     "nonfinite_draws": 0
+    },
+    "markers": {
+     "hi": 0.1556200730190284,
+     "lo": 0.0373263096476972,
+     "metric": 0.08800446651656363,
+     "nonfinite_draws": 0
+    },
+    "next_top20": {
+     "hi": 0.18311956747293687,
+     "lo": 0.04900948226391542,
+     "metric": 0.10985441285426442,
+     "nonfinite_draws": 0
+    },
+    "observables": {
+     "hi": 0.1812578505275074,
+     "lo": 0.04809978928614545,
+     "metric": 0.10466091501440337,
+     "nonfinite_draws": 0
+    },
+    "observables+activation": {
+     "hi": 0.28944392122560914,
+     "lo": 0.052270986072962,
+     "metric": 0.16353817899764522,
+     "nonfinite_draws": 0
+    },
+    "position": {
+     "hi": 0.1641647952156471,
+     "lo": 0.04436114596304514,
+     "metric": 0.0974029350042042,
+     "nonfinite_draws": 0
+    },
+    "prev_token": {
+     "hi": 0.16859823992691478,
+     "lo": 0.0383001285705548,
+     "metric": 0.08750104526224703,
+     "nonfinite_draws": 0
+    },
+    "strongest+activation": {
+     "hi": 0.2874054254143834,
+     "lo": 0.05128458686383036,
+     "metric": 0.16112792377993473,
+     "nonfinite_draws": 0
+    },
+    "strongest_baseline": {
+     "hi": 0.1798001834329342,
+     "lo": 0.044096513160388304,
+     "metric": 0.09963079534234365,
+     "nonfinite_draws": 0
+    }
+   },
+   "nested": {
+    "activation - position": {
+     "delta": 0.06462545006911712,
+     "hi": 0.12462407560147838,
+     "lo": -0.03640021676548807,
+     "nonfinite_draws": 0
+    },
+    "activation - strongest_baseline": {
+     "delta": 0.06239758973097767,
+     "hi": 0.1092738686727986,
+     "lo": -0.008269582320523598,
+     "nonfinite_draws": 0
+    },
+    "observables+activation - observables": {
+     "delta": 0.05887726398324185,
+     "hi": 0.11986726261862929,
+     "lo": -0.009028954761366993,
+     "nonfinite_draws": 0
+    },
+    "strongest+activation - strongest_baseline": {
+     "delta": 0.061497128437591086,
+     "hi": 0.11878222117284157,
+     "lo": -0.0031751249694113816,
+     "nonfinite_draws": 0
+    }
+   },
+   "prevalence": 0.08365758754863813,
+   "rows": 4112
+  }
+ }
+}

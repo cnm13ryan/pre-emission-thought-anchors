@@ -1,0 +1,79 @@
+{
+ "stage": "exploratory",
+ "preregistered": false,
+ "scope": "20 MVP problems, all previously seen",
+ "rollouts": 647400,
+ "forks": 6474,
+ "similarity_nan": 0,
+ "reproduction_gate": {
+  "eligible": 4019,
+  "recomputed_ok": 4019,
+  "status_counts_eligible": {
+   "OK": 4019
+  },
+  "spearman_vs_stored": 0.9999999999999998,
+  "anchor_flag_agreement": 1.0,
+  "dissimilar_count_exact": 1.0,
+  "max_abs_I_diff": 1.3877787807814457e-17,
+  "alpha_0_5_max_abs_diff": 1.3877787807814457e-17,
+  "alpha_1_max_abs_diff": 1.1102230246251565e-16,
+  "passed": true
+ },
+ "alpha_thresholds_train_q90": {
+  "1e-09": 1.3549810893213545,
+  "0.5": 0.24619239326587636,
+  "1": 0.26555698694073915
+ },
+ "candidate_thresholds_train_q90": {
+  "label_a_kl": 1.3549810893213545,
+  "label_b_kl_kt": 0.24619239326587636,
+  "label_c_fork_tv": 0.17
+ },
+ "no_answer_totals": {
+  "length_truncated": 9739,
+  "genuine_non_answer": 1437,
+  "parse_failure": 5
+ },
+ "no_answer_total": 11181,
+ "no_answer_token_histogram": {
+  "bins": [
+   0,
+   2000,
+   4000,
+   8000,
+   12000,
+   16000,
+   16320,
+   16385,
+   1000000000
+  ],
+  "counts": [
+   425,
+   345,
+   465,
+   140,
+   61,
+   1,
+   9740,
+   4
+  ]
+ },
+ "no_answer_tokens_missing": 0,
+ "no_answer_has_think_close": {
+  "genuine_non_answer": 0.34794711203897005,
+  "length_truncated": 0.01796899065612486,
+  "parse_failure": 0.2
+ },
+ "forks_with_any_no_answer": 2124,
+ "inclusion_label_status_pre": {
+  "included_pre_emission": 4750,
+  "label_missing_fork_next": 11,
+  "label_no_dissimilar_support": 627,
+  "kl_label_defined": 4112,
+  "fork_tv_defined": 4739,
+  "also_in_frozen_eligible": 4019,
+  "frozen_eligible_not_in_pre": 0,
+  "new_rows_vs_frozen": 731,
+  "new_rows_kl_anchor_1e-9": 0
+ }
+}
