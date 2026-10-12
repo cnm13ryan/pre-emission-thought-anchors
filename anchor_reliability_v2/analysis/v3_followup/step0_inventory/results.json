@@ -1,0 +1,41 @@
+{
+  "stage": "exploratory_post_hoc",
+  "task": "step0_inventory",
+  "sentence_i_stored": {
+    "phase2_replicates_1_2": {"stored": true, "path": "generations/phase2_mirror/20261009T0717Z-phase2-23f5e3e6/completions_index.parquet",
+      "columns": ["first_replacement_sentence", "raw_answer (full continuation incl. sentence i)", "finish_reason", "generated_token_count"],
+      "rows": 40000, "missing_first_replacement_sentence": 0.0},
+    "released_replicate_0": {"stored": true, "path": "derived/rollouts/<problem>_<kind>/fork_NNNN.parquet",
+      "columns": ["chunk_resampled (sentence i)", "chunk_removed (original S_i)", "boxes", "v2_status", "v2_answer", "rollout_tokens"],
+      "fork_files": 6474, "missing_chunk_resampled": 0.0,
+      "full_continuation_text": false,
+      "note": "released continuation text is not kept locally beyond boxes and answers; enough for T6 (sentence i + answer), not for re-parsing"},
+    "T6_feasible": true
+  },
+  "activations": {
+    "path": "~/preanchor-root/artifacts/runs/20260915T182306Z-3ab408d80a-7452f1c2/activations/units/<hash>/<trajectory>.safetensors",
+    "index": "activations/index.parquet (6474 sentences, 40 MVP traces, 20 problems)",
+    "tensors": {"resid": "[n_sentences, 49, 5120] float16 = embeddings + all 48 layers", "final_prev_position": "[n_sentences, 5120] float16"},
+    "site": "block_post_pre_final_norm",
+    "token_positions": "one token per sentence: boundary_token_idx, the last token before the sentence; no sentence-span or all-token states",
+    "raw_or_pca": "raw full-width residuals stored; PCA-128 exists only inside probe fits (s14/s16 fit it per fold)",
+    "attention": "not stored",
+    "covers_phase2_forks": true,
+    "size_gb": 3.1,
+    "T4_raw_vs_pca_feasible": true
+  },
+  "fork_window_selection": {
+    "code": "research/redesign/phase2_select.py in the parent repo (output research/redesign/phase2_forks.json, copied to configs/phase2_forks.json)",
+    "rule": "random, not importance-driven: rng=default_rng(int(sha256('20260914:phase2_selection')[:8],16)); permute the 16 non-test MVP problems, draw a trace kind per problem; window = 20 contiguous forks [s,s+19] with s+18 < min(n-1, convergence_idx(K=5), final_answer_idx) and fork s+19 existing; s drawn uniformly from admissible starts; first 10 admissible trajectories kept",
+    "selected": [["4605:correct",21,42],["4019:incorrect",146,179],["2238:incorrect",14,80],["6596:correct",105,214],["2050:correct",38,47],["1591:correct",2,128],["4164:correct",89,102],["3935:correct",13,25],["2189:correct",23,46],["330:correct",2,3]],
+    "selected_columns": ["trajectory_id", "start_fork", "admissible_starts"],
+    "plan_v3_pilot_reused_these_forks": true
+  },
+  "probe_capacity_job": {
+    "status": "finished and committed (3c2048c)",
+    "files": ["scripts/s16_probe_capacity.py", "results/s16_probe_capacity.json", "docs/probe_capacity.md"],
+    "headline": "best of 108 settings within-trace: acc_level 0.07 (ceiling 0.96), signed_dacc 0.04 (0.52), tv_debiased 0.08 (0.40); p_own decodes 0.52-0.71 but position alone 0.79; partial given position+entropy 0.02 [-0.02,0.06]; acc_level null is sign cancellation between correct/incorrect traces",
+    "not_run": ["ridge on raw 5120-d without PCA (PCA-512 max, 83% variance)", "gradient boosting on post features"]
+  },
+  "tasks_moved_to_step3": []
+}

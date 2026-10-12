@@ -1,0 +1,34 @@
+{
+ "correctness_v2_vs_stored_agreement_on_answered": 0.9994605917450093,
+ "eligible_v2": 4750,
+ "label_status_eligible_v2": {
+  "MISSING_FORK": 11,
+  "NO_SUPPORT": 627,
+  "OK": 4112
+ },
+ "mvp_eligible": 4019,
+ "reproduction": {
+  "max_abs_diff": 2.6645352591003757e-15,
+  "passed": true,
+  "rows": 4019,
+  "rows_diff_gt_1e-9": 0
+ },
+ "rollouts": 647400,
+ "rules": {
+  "rule_boxed_before": 1,
+  "rule_converged_mvp": 1835,
+  "rule_converged_pre": 1723,
+  "rule_final_answer_mvp": 19,
+  "rule_fork_i_missing": 0
+ },
+ "stage": "exploratory",
+ "v1_missing": 11181,
+ "v1_vs_v2_category_differs_on_answered": 2246,
+ "v2_status_counts": {
+  "answered": 635882,
+  "length_truncated": 10027,
+  "no_answer": 1133,
+  "unboxed_stated": 355,
+  "unterminated_box": 3
+ }
+}

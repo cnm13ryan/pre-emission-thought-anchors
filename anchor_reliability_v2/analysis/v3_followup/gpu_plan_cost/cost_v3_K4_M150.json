@@ -1,0 +1,76 @@
+{
+ "params": {
+  "N": 50,
+  "core": 20,
+  "F": 20,
+  "K": 4,
+  "M": 150,
+  "label_n": 100,
+  "screen_forks": 50,
+  "anchor_rate": 0.036,
+  "pool": 250,
+  "survivors": 100,
+  "puzzles": 200,
+  "math_nested": false,
+  "fwd_gpu_h": 12.0
+ },
+ "assumptions": {
+  "L_screen": 11000,
+  "L_cont": 6000,
+  "L_math": 4242,
+  "L_puzzle": 3000,
+  "node_tokens_per_s": {
+   "low": 6800.0,
+   "mid": 10880.0,
+   "high": 14960.0
+  }
+ },
+ "run1_tokens": {
+  "S1_screen_16": 44000000,
+  "S2_screen_32": 35200000,
+  "S3_puzzle_screen": 9600000,
+  "S4_contamination_probes": 600000,
+  "P1_short_budget_pilot": 3840000,
+  "D_dry_run": 25920000,
+  "C_calibration_a100": 8484000
+ },
+ "run2_tokens": {
+  "B1_fork_screen": 120000000,
+  "A1_nested_core": 1800000000,
+  "A1b_labels_reliability": 360000000,
+  "A1m_math_nested_optional": 0,
+  "A2_token_level": 43200000,
+  "A3_counterfactual": 324000000,
+  "A4_short_budget": 9600000,
+  "A5_prompt_format_2x2": 67872000,
+  "A6_puzzles": 210000000
+ },
+ "run1_total": 127644000,
+ "run2_total": 2934672000,
+ "run1_hours": {
+  "low": 7.3392156862745095,
+  "mid": 5.3838848039215685,
+  "high": 4.495098039215686
+ },
+ "run2_hours": {
+  "low": 122.88039215686275,
+  "mid": 77.92524509803923,
+  "high": 57.491087344028514
+ },
+ "run1_usd": {
+  "low@14.32": 105.09756862745098,
+  "low@10.32": 75.74070588235294,
+  "mid@14.32": 77.09723039215686,
+  "mid@10.32": 55.56169117647059,
+  "high@14.32": 64.36980392156863,
+  "high@10.32": 46.38941176470588
+ },
+ "run2_usd": {
+  "low@14.32": 1759.6472156862746,
+  "low@10.32": 1268.1256470588237,
+  "mid@14.32": 1115.8895098039218,
+  "mid@10.32": 804.1885294117649,
+  "high@14.32": 823.2723707664884,
+  "high@10.32": 593.3080213903743
+ }
+}

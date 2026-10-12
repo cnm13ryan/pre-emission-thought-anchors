@@ -1,0 +1,14 @@
+set,rule,marginal_removed,sequential_removed
+original,rule_alignment,0.0,0
+original,rule_first_token,0.0,0
+original,rule_final_answer_orig,19.0,19
+original,rule_fork_next_missing,40.0,21
+original,rule_convergence_orig,1835.0,1807
+original,rule_no_dissimilar,874.0,608
+original,REMAINING,,4019
+pre_emission,rule_alignment,0.0,0
+pre_emission,rule_first_token,0.0,0
+pre_emission,rule_final_answer_pre,1.0,1
+pre_emission,rule_fork_i_missing,0.0,0
+pre_emission,rule_convergence_pre,1723.0,1723
+pre_emission,REMAINING,,4750

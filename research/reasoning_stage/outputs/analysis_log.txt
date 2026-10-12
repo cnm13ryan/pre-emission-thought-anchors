@@ -1,0 +1,39 @@
+[stage/position_only] validation: acc=0.0763 f1=0.0531 ll=1.9236 test: acc=0.099 f1=0.0613 ll=1.8901
+[stage/observables12] validation: acc=0.2656 f1=0.1746 ll=1.803 test: acc=0.2202 f1=0.1434 ll=1.8488
+[stage/activations_l44] validation: acc=0.6838 f1=0.4571 ll=1.3297 test: acc=0.6337 f1=0.3845 ll=1.531
+[stage/activations_l0] validation: acc=0.3272 f1=0.1382 ll=1.6241 test: acc=0.1998 f1=0.106 ll=1.8215
+[stage/activations_l44_plus_position] validation: acc=0.6838 f1=0.458 ll=1.3333 test: acc=0.6337 f1=0.4005 ll=1.5299
+[stage/activations_l44_plus_observables12] validation: acc=0.686 f1=0.4627 ll=1.3306 test: acc=0.6327 f1=0.3876 ll=1.5209
+[anchor_ladder/position] C=0.0001 cvAP=0.1142 validation: AP=0.133 AUROC=0.662 test: AP=0.1394 AUROC=0.7188
+[anchor_ladder/stage] C=1.0 cvAP=0.1031 validation: AP=0.0875 AUROC=0.5134 test: AP=0.0351 AUROC=0.4746
+[anchor_ladder/position_stage] C=0.001 cvAP=0.1076 validation: AP=0.1269 AUROC=0.5947 test: AP=0.0919 AUROC=0.5551
+[anchor_ladder/act44] C=0.1 cvAP=0.1263 validation: AP=0.1711 AUROC=0.6522 test: AP=0.0935 AUROC=0.645
+[anchor_ladder/act44_position] C=0.1 cvAP=0.1255 validation: AP=0.171 AUROC=0.6516 test: AP=0.0921 AUROC=0.6448
+[anchor_ladder/act44_stage] C=100.0 cvAP=0.1263 validation: AP=0.1867 AUROC=0.6534 test: AP=0.0714 AUROC=0.602
+[anchor_ladder/act44_position_stage] C=100.0 cvAP=0.1276 validation: AP=0.1861 AUROC=0.6508 test: AP=0.073 AUROC=0.602
+[anchor_ladder/obs12_stage] C=0.0001 cvAP=0.1008 validation: AP=0.1333 AUROC=0.6122 test: AP=0.0444 AUROC=0.4913
+[anchor_ladder/act44_obs12_stage] C=0.1 cvAP=0.1266 validation: AP=0.1615 AUROC=0.6519 test: AP=0.0956 AUROC=0.6523
+[boot act_vs_position] validation: {'point': 0.0381, 'low': -0.0624, 'high': 0.087, 'mean': 0.0232, 'n_valid': 2000} test: {'point': -0.0459, 'low': -0.2347, 'high': 0.0224, 'mean': -0.0715, 'n_valid': 2000}
+[boot actpos_vs_pos] validation: {'point': 0.038, 'low': -0.0629, 'high': 0.0869, 'mean': 0.0235, 'n_valid': 2000} test: {'point': -0.0472, 'low': -0.239, 'high': 0.0208, 'mean': -0.0697, 'n_valid': 2000}
+[boot actposstage_vs_posstage] validation: {'point': 0.0592, 'low': -0.1008, 'high': 0.1453, 'mean': 0.0397, 'n_valid': 2000} test: {'point': -0.0189, 'low': -0.1637, 'high': 0.0984, 'mean': -0.0309, 'n_valid': 2000}
+[boot actobsstage_vs_obsstage] validation: {'point': 0.0282, 'low': -0.0312, 'high': 0.0547, 'mean': 0.0153, 'n_valid': 2000} test: {'point': 0.0512, 'low': -0.0233, 'high': 0.1002, 'mean': 0.0467, 'n_valid': 2000}
+[boot posstage_vs_pos] validation: {'point': -0.0061, 'low': -0.0422, 'high': 0.0425, 'mean': -0.0031, 'n_valid': 2000} test: {'point': -0.0475, 'low': -0.1656, 'high': 0.0027, 'mean': -0.0528, 'n_valid': 2000}
+[anchor_ladder/act44_resid_position_stage] C=1.0 cvAP=0.1017 validation: AP=0.1553 AUROC=0.6574 test: AP=0.0861 AUROC=0.6706
+[transitions] {"point": 0.0036, "low": -0.023, "high": 0.0282}
+[transition_pred/position] C=0.01 cvAP=0.5474 validation: AP=0.4054 AUROC=0.3856 test: AP=0.6261 AUROC=0.5305
+[transition_pred/act44] C=0.0001 cvAP=0.8089 validation: AP=0.805 AUROC=0.8509 test: AP=0.8479 AUROC=0.7997
+[transition_pred/act44_position] C=0.0001 cvAP=0.8091 validation: AP=0.805 AUROC=0.8508 test: AP=0.8478 AUROC=0.7996
+[transition_pred/observables12] C=0.1 cvAP=0.6373 validation: AP=0.6335 AUROC=0.6901 test: AP=0.636 AUROC=0.5448
+[boot transition actpos_vs_pos] {"validation": {"point": 0.3995, "low": 0.3379, "high": 0.449, "mean": 0.3935, "n_valid": 2000}, "test": {"point": 0.2218, "low": 0.1115, "high": 0.2785, "mean": 0.2128, "n_valid": 2000}}
+[transition_pred/act44_lead1] C=0.0001 cvAP=0.7707 validation: AP=0.7653 AUROC=0.7957 test: AP=0.822 AUROC=0.7611
+[transition_pred/act44_lead1_position] C=0.0001 cvAP=0.7708 validation: AP=0.7652 AUROC=0.7957 test: AP=0.8221 AUROC=0.7611
+[transition_pred/position_lead1_rows] C=0.01 cvAP=0.5474 validation: AP=0.4054 AUROC=0.3856 test: AP=0.6261 AUROC=0.5305
+[boot lead1] {"validation": {"point": 0.3597, "low": 0.2901, "high": 0.4212, "mean": 0.3517, "n_valid": 2000}, "test": {"point": 0.1961, "low": 0.0775, "high": 0.264, "mean": 0.1901, "n_valid": 2000}}
+[transition_pred/oracle_prevstage_position] C=0.001 cvAP=0.8062 validation: AP=0.7623 AUROC=0.7423 test: AP=0.7924 AUROC=0.7296
+[transition_pred/act44_lead1_plus_oracle_prevstage] C=0.0001 cvAP=0.7788 validation: AP=0.7732 AUROC=0.8044 test: AP=0.8267 AUROC=0.7692
+[boot lead1 vs oracle] {"validation": {"point": 0.0108, "low": -0.0149, "high": 0.0316, "mean": 0.009, "n_valid": 2000}, "test": {"point": 0.0343, "low": 0.0011, "high": 0.0807, "mean": 0.0336, "n_valid": 2000}}
+[within_compute/act44] C=0.0001 cvAP=0.1599 validation: AP=0.1979 AUROC=0.6533 test: AP=0.0495 AUROC=0.5417
+[within_compute/position] C=0.0001 cvAP=0.1433 validation: AP=0.149 AUROC=0.6812 test: AP=0.0842 AUROC=0.6739
+[boot within-compute] {"validation": {"point": 0.0489, "low": 0.0028, "high": 0.0616, "mean": 0.0341, "n_valid": 2000}, "test": {"point": -0.0347, "low": -0.0853, "high": -0.0074, "mean": -0.042, "n_valid": 1994}}
+[stage/act44_lead1] {"validation": {"accuracy": 0.4886, "macro_f1": 0.266, "log_loss": 2.2574}, "test": {"accuracy": 0.438, "macro_f1": 0.2792, "log_loss": 2.385}}
+saved /Users/cnm13ryan/git/pre-emission-thought-anchors/research/reasoning_stage/outputs/analysis_results.json

@@ -38,3 +38,12 @@ signal survives within each stratum. The frozen boundary definition is not chang
   probe result that depends on that precision would be an artifact, testable by recomputing
   the uncertainty columns with the bfloat16 head from `logit_features.parquet` of the smoke
   runs.
+## 2026-09-18: blog audit of the transition positive control
+
+The site-44 activation-only transition probe exceeds the saved previous-stage-plus-position baseline by AP 0.0427 on validation and 0.0555 on test; exploratory paired problem-bootstrap intervals are positive on both four-problem splits. See `research/blog/evidence.json` for reproduced values and seeds.
+
+- Position and prefix length: the stronger baseline reduces the apparent advantage substantially; test richer position controls and prefix-text predictors before claiming conditional information beyond all observable structure.
+- Uncertainty: scalar entropy/mass features discard token identity. Compare the full next-token distribution and marker probabilities.
+- Tokenisation and lexical preparation: 770/830 backtracking labels begin with rule-associated opening markers. Test preceding-token/K-token baselines and earlier token boundaries; stratify overlapping-token cases and harmonise generation/extraction prefixes.
+- Label noise: deterministic stages are surface labels, not audited functional reasoning annotations. Audit independent functional labels. The separate anchor target has strong smoothing sensitivity; repeated counterfactual resampling is still needed to measure reliability.
+- Lead time: the activation-only earlier-state result can reflect anticipation of the intervening stage. Oracle controls are diagnostic, and exploratory position-augmented lead-one arms include target-boundary fields unavailable at the earlier boundary. Fresh matched-boundary experiments are required.

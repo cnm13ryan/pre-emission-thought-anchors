@@ -1,0 +1,57 @@
+problem_id,ground_truth,no_reasoning_accuracy,no_reasoning_unparsed,no_reasoning_modal_answer,words_in_problem,next10_exact,next_words_compared,continuation_edit_similarity,continuation_preview,flagged
+330,88572,0.0,0,2187,2,False,1,0.05063291139240506,"<think>
+
+Compute the following expression: 2 + 3 * 4.
+
+</think>
+
+To compute the expression \(2 + 3 \times 4\), follow th",False
+1591,6.17,0.8,0,6.17,48,False,10,0.28720626631853785," to an annual rate of 6.09 percent, how is this calculated?
+
+Okay, so I have this problem about Dr. Fu Manchu's bank acc",True
+2050,336,0.0,0,238,102,False,10,0.21084337349397592, is impossible to rotate one to look like the other. How many distinguishable large triangles can be formed? Use Burnsid,False
+2137,640,0.0,0,486,134,False,10,0.06870229007633588," placed. Then, moving up each row, each square is assigned a value equal to the sum modulo 2 of the two squares it rests",False
+2189,588,0.0,0,120,44,False,10,0.33678756476683935," her to arrange these plates in a circle, considering that plates of the same color are indistinct?
+
+Okay, so I have thi",False
+2236,90,0.0,0,100,42,False,10,0.4772117962466488, the last page is page 488. Each page number is printed using either one digit or two digits. How many digits are used t,False
+2238,120,0.0,0,15,8,False,4,0.12582781456953643," of the term with degree 3 in the expansion of (x + y)^4?
+
+Okay, so I need to find the coefficient of the term with degr",False
+2870,16\sqrt3,0.0,0,12\sqrt3,86,False,10,0.034722222222222224," the overlapping region?
+
+Okay, so I have this problem where there are two boards crossing each other to form an X. One ",False
+3360,12.1,0.0,0,12.7,73,False,10,0.35944700460829493, oil inside reaches a height of $12$ feet. What is the volume of the oil in the tank? Express your answer in terms of π.,False
+3448,-\frac14027,0.0,0,1,50,False,10,0.416403785488959, = \frac{x(x-1)(x-2)\dots(x - k + 1)}{k!} \] and that the binomial theorem can be extended to any real exponent using th,False
+3550,\frac289259,0.0,0,1,24,False,10,0.33222591362126247," at most 2006 is constructed such that $P(r_i)=f'(r_i)$ for each $inter i$. Then, what is the value of $P(0)$?
+
+Okay, so",False
+3916,1970,0.0,0,2000,28,False,10,0.4656084656084656," \; 3+\sqrt{5}, \; 4+\sqrt{7}\] as roots. What is the minimal possible degree of such a polynomial?
+
+Okay, so I have thi",False
+3935,429,0.0,0,3,41,False,10,0.1958041958041958," $f(x) = x$ for all $x$ in the interval [1,3]. What is the value of $f(9)$?
+
+Okay, so I have this function f with two pr",False
+4019,4,0.15,0,2,50,False,10,0.34814814814814815,"
+\[
+\frac{z - r}{z - s} = \frac{z - t}{z - u}
+\]
+for some complex number $u$. Then, what is the relationship between $c$",False
+4164,-\frac512,0.0,0,5,17,False,9,0.1651376146788991," all integers $n \geq 1$. Find $p(0)$.
+
+Okay, so I have this problem where there's a cubic polynomial \( p(x) \) and it ",False
+4605,\frac15,0.0,0,3,22,False,10,0.3783783783783784," f_2(x) = f(f_1(x))$, and so on, then find $f_{2023}(x)$.
+
+Okay, so I have this function f(x) = (1 + x)/(1 - 3x), and I ",False
+4682,19,0.0,0,20,18,False,9,0.17829457364341086,"-10, what is the sum of its digits?
+
+Okay, so I have this problem where I need to convert the base-16 number 66666₁₆ int",False
+6481,30.8,0.0,0,12.5,72,False,10,0.09246575342465753,". What is the area of the shaded region?
+
+Okay, so I have this problem about a square with an area of 81 square units. O",False
+6596,5.8,0.0,0,10,54,False,10,0.056179775280898875," between the centers of the two squares?
+
+Okay, so I have this problem here about two squares. The smaller one has a per",False
+6998,2865,0.0,0,2500,23,False,10,0.2204724409448819," \sin(2\pi x) + \sin(4\pi x)$.
+
+Okay, so I need to find the number of x-intercepts for the function y = sin(2πx) + sin(4",False

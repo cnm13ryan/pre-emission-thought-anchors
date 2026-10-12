@@ -790,6 +790,75 @@ def run_sensitivities_command(
         "elapsed_seconds": summary["elapsed_seconds"]}), sort_keys=True))
 
 
+def _stage11_root(root: Path | None) -> Path:
+    from preanchor.backup.cli import resolve_root
+
+    return resolve_root(root)
+
+
+def _discover_run(root: Path, stage: str) -> str:
+    runs = sorted(p for p in (root / "artifacts/runs").iterdir()
+                  if (p / "stages" / stage).is_dir())
+    if len(runs) != 1:
+        raise typer.BadParameter(
+            f"Expected exactly one run with stages/{stage} under {root}, found "
+            f"{[p.name for p in runs]}; pass the run id explicitly")
+    return runs[0].name
+
+
+@app.command("render-report")
+def render_report_command(
+    root: Annotated[Path | None, typer.Option(
+        help="Artifact root (default: PREANCHOR_ROOT, /lambda/nfs only; pass explicitly "
+             "for a restored root).")] = None,
+    stage9_run_id: Annotated[str | None, typer.Option()] = None,
+    stage10_run_id: Annotated[str | None, typer.Option()] = None,
+    stage8_run_id: Annotated[str | None, typer.Option()] = None,
+    output: Annotated[Path | None, typer.Option(
+        help="Output directory (default: <root>/artifacts/runs/<ts>-stage11-report).")] = None,
+) -> None:
+    """SPEC Stage 11: build the MVP report and figures from saved predictions and metrics
+    only. Stage 3-10 inputs are sidecar-verified and read strictly read-only."""
+    import datetime
+
+    from preanchor.report.render import render_report
+
+    resolved = _stage11_root(root)
+    s9 = stage9_run_id or _discover_run(resolved, "stage9")
+    s10 = stage10_run_id or _discover_run(resolved, "stage10")
+    s8 = stage8_run_id or _discover_run(resolved, "stage8")
+    if output is None:
+        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
+        output = resolved / "artifacts/runs" / f"{stamp}-stage11-report"
+    result = render_report(resolved, output, stage9_run_id=s9, stage10_run_id=s10,
+                           stage8_run_id=s8)
+    typer.echo(json.dumps({"out": result["out"], "outputs": result["outputs"]},
+                          sort_keys=True))
+
+
+@app.command("export-interface")
+def export_interface_command(
+    root: Annotated[Path | None, typer.Option()] = None,
+    stage9_run_id: Annotated[str | None, typer.Option()] = None,
+    output: Annotated[Path | None, typer.Option(
+        help="Output directory (default: <report run>/trajectory_exports).")] = None,
+) -> None:
+    """Export step_importance.json / chunks_labeled.json in the vendored
+    thought-anchors.com convention (pairwise impacts are not measured: empty by design)."""
+    import datetime
+
+    from preanchor.report.export import export_interface
+
+    resolved = _stage11_root(root)
+    s9 = stage9_run_id or _discover_run(resolved, "stage9")
+    if output is None:
+        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
+        output = resolved / "artifacts/runs" / f"{stamp}-stage11-report" / "trajectory_exports"
+    result = export_interface(resolved, output, stage9_run_id=s9)
+    typer.echo(json.dumps({"out": result["out"],
+                           "trajectories": result["trajectories"]}, sort_keys=True))
+
+
 @app.command("validate-sensitivities")
 def validate_sensitivities_command(
     run_id: Annotated[str, typer.Option()],
